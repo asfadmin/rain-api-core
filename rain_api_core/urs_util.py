@@ -1,0 +1,273 @@
+
+import logging
+import os
+import re
+import urllib
+
+from json import loads
+
+from .view_util import make_set_cookie_headers
+from .aws_util import retrieve_secret
+from .session_util import store_session
+
+log = logging.getLogger(__name__)
+
+
+
+
+def get_base_url(ctxt=False):
+    # Make a redirect url using optional custom domain_name, otherwise use raw domain/stage provided by API Gateway.
+    try:
+        return 'https://{}/'.format(
+            os.getenv('DOMAIN_NAME', '{}/{}'.format(ctxt['domainName'], ctxt['stage'])))
+    except (TypeError, IndexError) as e:
+        log.error('could not create a redirect_url, because {}'.format(e))
+        raise
+
+def get_redirect_url(ctxt=False):
+    return '{}login'.format(get_base_url(ctxt))
+
+
+def do_auth(code, redirect_url):
+
+    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
+
+    # App U:P from URS Application
+    auth = get_urs_creds()['UrsAuth']
+
+    post_data = {"grant_type": "authorization_code",
+                 "code": code,
+                 "redirect_uri": redirect_url}
+
+    headers = {"Authorization": "BASIC " + auth}
+    post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
+    post_request = urllib.request.Request(url, post_data_encoded, headers)
+
+    try:
+        log.debug('headers: {}'.format(headers))
+        log.debug('url: {}'.format(url))
+        log.debug('post_data: {}'.format(post_data))
+
+        response = urllib.request.urlopen(post_request)                               #nosec URL is *always* URS.
+        packet = response.read()
+        return loads(packet)
+
+    except urllib.error.URLError as e:
+        log.error("Error fetching auth: {0}".format(e))
+        return False
+
+
+def get_urs_url(ctxt, to=False):
+
+    base_url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + '/oauth/authorize'
+
+    # From URS Application
+    client_id = get_urs_creds()['UrsId']
+
+    log.debug('domain name: %s' % os.getenv('DOMAIN_NAME', 'no domainname set'))
+    log.debug('if no domain name set: {}/{}'.format(ctxt['domainName'], ctxt['stage']))
+
+    urs_url = '{0}?client_id={1}&response_type=code&redirect_uri={2}'.format(base_url, client_id, get_redirect_url(ctxt))
+    if to:
+        urs_url += "&state={0}".format(to)
+
+    # Try to handle scripts
+    agent_pattern = re.compile('^(curl|wget|aria2|python)', re.IGNORECASE)
+
+    try:
+        download_agent = ctxt['identity']['userAgent']
+    except IndexError:
+        log.debug("No User Agent!")
+        return urs_url
+
+    if agent_pattern.match(download_agent):
+        urs_url += "&app_type=401"
+
+    return urs_url
+
+def get_profile(user_id, token=None, reuse_old_token=None):
+    if not user_id:
+        return False
+
+    if reuse_old_token:
+        refresh_user_profile(user_id)
+    else:
+        log.info("Getting profile for {0}".format(user_id))
+
+    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/api/users/{0}".format(user_id)
+    headers = {"Authorization": "Bearer " + token}
+    req = urllib.request.Request(url, None, headers)
+
+    # check if we're re-using an old token
+    cookie_token = reuse_old_token if reuse_old_token else token
+
+    try:
+        response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
+        packet = response.read()
+        user_profile = loads(packet)
+
+        store_session(user_id, cookie_token, user_profile)
+        return user_profile
+
+    except urllib.error.URLError as e:
+        log.error("Error fetching profile: {0}".format(e))
+        return False
+
+def refresh_user_profile(user_id):
+
+    # get a new token
+    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
+
+    # App U:P from URS Application
+    auth = get_urs_creds()['UrsAuth']
+    post_data = {"grant_type": "client_credentials" }
+    headers = {"Authorization": "BASIC " + auth}
+
+    # Download token
+    post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
+    post_request = urllib.request.Request(url, post_data_encoded, headers)
+
+    try:
+        log.info("Attempting to get new Token")
+        response = urllib.request.urlopen(post_request)                              #nosec URL is *always* URS.
+        packet = response.read()
+        new_token = loads(packet)['access_token']
+        log.info("Retrieved new token: {0}".format(new_token))
+
+        # Get user profile with new token
+        return get_profile(user_id, new_token)
+
+    except urllib.error.URLError as e:
+        log.error("Error fetching auth: {0}".format(e))
+        return False
+
+
+def check_profile(cookies):
+    try:
+        token = cookies['urs-access-token']
+        user_id = cookies['urs-user-id']
+    except(IndexError, KeyError):
+        token = False
+        user_id = False
+
+    if token and user_id:
+        return get_profile(user_id, token)
+
+    log.warning('Did not find token ({0}) or user_id ({1})'.format(token, user_id))
+    return False
+
+
+def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
+
+    if not private_groups:
+        return False
+
+    user_id = cookievars['urs-user-id']
+    token = cookievars['urs-access-token']
+
+    # initially, we want to try to see if the user is in the group before refresh
+    if refresh_first or not user_profile:
+        user_profile = get_profile(user_id, token, True)
+
+    # check if the use has one of the groups from the private group list
+
+    if 'user_groups' in user_profile:
+        client_id = get_urs_creds()['UrsId']
+        log.info ("Searching for private groups {0} in {1}".format( private_groups, user_profile['user_groups']))
+        for u_g in user_profile['user_groups']:
+            if u_g['client_id'] == client_id:
+                for p_g in private_groups:
+                    if p_g == u_g['name']:
+                        # Found the matching group!
+                        log.info("User {0} belongs to private group {1}".format(user_id, p_g))
+                        return True
+
+    # User likely isn't in ANY groups
+    else:
+       log.warning('user_groups block not found in user profile!')
+
+    if not refresh_first:
+        # maybe refreshing the user's profile will help
+        log.info("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
+        return user_in_group(private_groups, cookievars, refresh_first=True)
+
+    log.warning("Even after profile fresh, user {0} does not below to groups {1}".format(user_id, private_groups))
+    return False
+
+# return looks like:
+# {
+#     "UrsId": "stringofseeminglyrandomcharacters",
+#     "UrsAuth": "verymuchlongerstringofseeminglyrandomcharacters"
+# }
+def get_urs_creds():
+
+    secret_name = os.getenv('URS_CREDS_SECRET_NAME', None)
+
+    if not secret_name:
+        log.error('URS_CREDS_SECRET_NAME not set')
+        return {}
+    secret = retrieve_secret(secret_name)
+    if not ('UrsId' in secret and 'UrsAuth' in secret):
+        log.error('AWS secret {} does not contain required keys "UrsId" and "UrsAuth"'.format(secret_name))
+
+    return secret
+
+
+# This do_login() is mainly for chalice clients.
+def do_login(args, context, cookie_domain=''):
+
+    log.debug('the query_params: {}'.format(args))
+
+    if not args:
+        template_vars = {'contentstring': 'No params', 'title': 'Could Not Login'}
+        headers = {}
+        return 400, template_vars, headers
+
+    if args.get('error', False):
+        contentstring = 'An error occurred while trying to log into URS. URS says: "{}". '.format(args.get('error', ''))
+        if args.get('error') == 'access_denied':
+            # This happens when user doesn't agree to EULA. Maybe other times too.
+            return_status = 401
+            contentstring += 'Be sure to agree to the EULA.'
+        else:
+            return_status = 400
+
+        template_vars = {'contentstring': contentstring, 'title': 'Could Not Login'}
+
+        return return_status, template_vars, {}
+
+    if 'code' not in args:
+        contentstring = 'Did not get the required CODE from URS'
+
+        template_vars = {'contentstring': contentstring, 'title': 'Could not login.'}
+        headers = {}
+        return 400, template_vars, headers
+
+    log.debug('pre-do_auth() query params: {}'.format(args))
+    redir_url = get_redirect_url(context)
+    auth = do_auth(args.get('code', ''), redir_url)
+    log.debug('auth: {}'.format(auth))
+    if not auth:
+        log.debug('no auth returned from do_auth()')
+
+        template_vars = {'contentstring': 'There was a problem talking to URS Login', 'title': 'Could Not Login'}
+
+        return 400, template_vars, {}
+
+    user_id = auth['endpoint'].split('/')[-1]
+
+    user_profile = get_profile(user_id, auth['access_token'])
+    log.debug('Got the user profile: {}'.format(user_profile))
+    if user_profile:
+        log.debug('urs-access-token: {}'.format(auth['access_token']))
+        if 'state' in args:
+            redirect_to = args["state"]
+        else:
+            redirect_to = get_base_url(context)
+
+        headers = {'Location': redirect_to}
+        headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
+        return 301, {}, headers
+
+    template_vars = {'contentstring': 'Could not get user profile from URS', 'title': 'Could Not Login'}
+    return 400, template_vars, {}
