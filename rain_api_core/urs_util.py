@@ -191,7 +191,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         log.info("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
         return user_in_group(private_groups, cookievars, refresh_first=True)
 
-    log.warning("Even after profile fresh, user {0} does not below to groups {1}".format(user_id, private_groups))
+    log.warning("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
     return False
 
 # return looks like:
