@@ -99,7 +99,6 @@ def get_profile(user_id, token):
         response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
         packet = response.read()
         user_profile = loads(packet)
-        log.debug()
         store_session(user_id, token, user_profile)
         return user_profile
 
@@ -150,7 +149,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
     # User likely isn't in ANY groups
     else:
-       log.warning('user_groups block not found in user profile!')
+        log.warning('user_groups block not found in user profile!')
 
     if not refresh_first:
         # maybe refreshing the user's profile will help
