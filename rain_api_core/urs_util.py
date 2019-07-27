@@ -87,24 +87,35 @@ def get_urs_url(ctxt, to=False):
     return urs_url
 
 
-def get_profile(user_id, token):
+def get_profile(user_id, token, temptoken=False):
     if not user_id or not token:
-        return False
+        return {}
+
+    # get_new_token_and_profile() will pass this function a temporary token with which to fetch the profile info. We
+    # don't want to keep it around, just use it here, once:
+    if temptoken:
+        headertoken = temptoken
+    else:
+        headertoken = token
 
     url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/api/users/{0}".format(user_id)
-    headers = {"Authorization": "Bearer " + token}
+    headers = {"Authorization": "Bearer " + headertoken}
     req = urllib.request.Request(url, None, headers)
 
     try:
         response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
         packet = response.read()
         user_profile = loads(packet)
+
         store_session(user_id, token, user_profile)
         return user_profile
 
     except urllib.error.URLError as e:
         log.error("Error fetching profile: {0}".format(e))
-        return False
+        if not temptoken: # This keeps get_new_token_and_profile() from calling this over and over
+            return get_new_token_and_profile(user_id, token)
+        else:
+            return {}
 
 
 def check_profile(cookies):
@@ -122,6 +133,34 @@ def check_profile(cookies):
     return False
 
 
+def get_new_token_and_profile(user_id, cookietoken):
+
+    # get a new token
+    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
+
+    # App U:P from URS Application
+    auth = get_urs_creds()['UrsAuth']
+    post_data = {"grant_type": "client_credentials" }
+    headers = {"Authorization": "BASIC " + auth}
+
+    # Download token
+    post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
+    post_request = urllib.request.Request(url, post_data_encoded, headers)
+
+    try:
+        log.info("Attempting to get new Token")
+        response = urllib.request.urlopen(post_request)                              #nosec URL is *always* URS.
+        packet = response.read()
+        new_token = loads(packet)['access_token']
+        log.info("Retrieved new token: {0}".format(new_token))
+
+        # Get user profile with new token
+        return get_profile(user_id, cookietoken, new_token)
+
+    except urllib.error.URLError as e:
+        log.error("Error fetching auth: {0}".format(e))
+        return False
+
 def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
 
     if not private_groups:
@@ -136,7 +175,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
     # check if the use has one of the groups from the private group list
 
-    if 'user_groups' in user_profile:
+    if user_profile and 'user_groups' in user_profile:
         client_id = get_urs_creds()['UrsId']
         log.info ("Searching for private groups {0} in {1}".format( private_groups, user_profile['user_groups']))
         for u_g in user_profile['user_groups']:
