@@ -10,11 +10,17 @@ from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
-
+secret_cache = {}
 
 def retrieve_secret(secret_name):
 
+    global secret_cache                                                               # pylint: disable=global-statement
     t0 = time()
+
+    if secret_name in secret_cache:
+        log.debug('ET for retrieving secret {} from cache: {} sec'.format(secret_name, round(time() - t0, 4)))
+        return secret_cache[secret_name]
+
     region_name = os.getenv('AWS_DEFAULT_REGION')
     # Create a Secrets Manager client
     session = botosession.Session()
@@ -38,8 +44,11 @@ def retrieve_secret(secret_name):
         # Decrypts secret using the associated KMS CMK.
         # Depending on whether the secret is a string or binary, one of these fields will be populated.
         if 'SecretString' in get_secret_value_response:
-            log.debug('ET for retrieving secret {} from S3: {} sec'.format(secret_name, round(time() - t0, 4)))
-            return loads(get_secret_value_response['SecretString'])
+
+            secret = loads(get_secret_value_response['SecretString'])
+            secret_cache[secret_name] = secret
+            log.debug('ET for retrieving secret {} from secret store: {} sec'.format(secret_name, round(time() - t0, 4)))
+            return secret
 
     return {}
 
