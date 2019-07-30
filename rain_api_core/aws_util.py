@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from json import loads
+from time import time
 from yaml import safe_load
 from boto3 import client as botoclient, resource as botoresource, session as botosession, Session as boto_Session
 from botocore.config import Config as bc_Config
@@ -13,6 +14,7 @@ log = logging.getLogger(__name__)
 
 def retrieve_secret(secret_name):
 
+    t0 = time()
     region_name = os.getenv('AWS_DEFAULT_REGION')
     # Create a Secrets Manager client
     session = botosession.Session()
@@ -36,6 +38,7 @@ def retrieve_secret(secret_name):
         # Decrypts secret using the associated KMS CMK.
         # Depending on whether the secret is a string or binary, one of these fields will be populated.
         if 'SecretString' in get_secret_value_response:
+            log.debug('ET for retrieving secret {} from S3: {} sec'.format(secret_name, round(time() - t0, 4)))
             return loads(get_secret_value_response['SecretString'])
 
     return {}
@@ -53,6 +56,7 @@ def get_s3_resource():
 
 def write_s3(bucket, key, data):
 
+    t0 = time()
     log.debug("Writing data to s3://{1}/{0}".format(key, bucket))
     params = {}
     # Swift signature compatability
@@ -61,14 +65,17 @@ def write_s3(bucket, key, data):
     s3 = botoresource('s3', **params)
     s3object = s3.Object(bucket, key)
     s3object.put(Body=data)
+    log.debug('ET for writing {} to S3: {} sec'.format(key, round(time() - t0, 4)))
     return True
 
 
 def read_s3(bucket, key):
 
+    t0 = time()
     log.info("Downloading config file {0} from s3://{1}...".format(key, bucket))
     s3 = get_s3_resource()
     obj = s3.Object(bucket, key)
+    log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
     return obj.get()['Body'].read().decode('utf-8')
 
 

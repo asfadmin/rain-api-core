@@ -71,9 +71,10 @@ def get_cached_session(user_id, token):
 
 
 def get_session(user_id, token):
-
+    t0 = time()
     sess = get_cached_session(user_id, token)
     if sess:
+        log.debug('ET session retrieval (cached): {} sec'.format(round(time() - t0, 4)))
         return sess
 
     if session_store == 'DB':
@@ -84,13 +85,14 @@ def get_session(user_id, token):
 
 
 def get_session_from_db(user_id, token):
-
+    t0 = time()
     session_path = craft_profile_path(user_id, token)
     keydict = {'id': {'S': session_path}}
     resp = ddb.get_item(TableName=sesstable, Key=keydict)
     try:
         session = json.loads(resp['Item']['session']['S'])
         cache_session(user_id, token, session)
+        log.debug('ET session retrieval (from DB): {} sec'.format(round(time() - t0, 4)))
         return session
     except KeyError as e:
         log.error('trouble getting session out of table for {} because {}. This is what they gave us: {}'.format(user_id, e, resp))
@@ -102,9 +104,11 @@ def craft_profile_path(user_id, token):
 
 
 def get_session_from_s3(user_id, token):
+    t0 = time()
     profile_path = craft_profile_path(user_id, token)
     try:
         profile = json.loads(read_s3(os.getenv('SESSION_BUCKET', "rain-t-config"), profile_path))
+        log.debug('ET session retrieval (from S3): {} sec'.format(round(time() - t0, 4)))
     except ClientError as e:
         log.warning('error loading profile: ')
         log.warning(e)
@@ -125,17 +129,22 @@ def store_session(user_id, token, sess):
 
 
 def store_session_in_db(user_id, token, sess):
+    t0 = time()
     item = {'id': {'S': '{}/{}'.format(user_id, token)},
             'expires': {'N': str(int(time()) + sessttl)},
             'session': {'S': json.dumps(sess)}}
     log.debug('putting {} into table {}'.format(item, sess))
     ddb.put_item(TableName=sesstable, Item=item)
+    log.debug('ET session store (to DB): {} sec'.format(round(time() - t0, 4)))
     return True
 
 
 def store_session_in_s3(user_id, token, user_profile):
+    t0 = time()
     profile_path = craft_profile_path(user_id, token)
     write_s3(os.getenv('SESSION_BUCKET', None), profile_path, json.dumps(user_profile))
+    log.debug('ET session store (to s3): {} sec'.format(round(time() - t0, 4)))
+    return True
 
 
 def extend_session_ttl(user_id, token):

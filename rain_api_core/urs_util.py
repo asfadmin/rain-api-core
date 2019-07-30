@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import urllib
-
+from time import time
 from json import loads
 
 from .view_util import make_set_cookie_headers
@@ -44,17 +44,22 @@ def do_auth(code, redirect_url):
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
+    t0 = time()
     try:
         log.debug('headers: {}'.format(headers))
         log.debug('url: {}'.format(url))
         log.debug('post_data: {}'.format(post_data))
 
         response = urllib.request.urlopen(post_request)                               #nosec URL is *always* URS.
+        t1 = time()
         packet = response.read()
+        log.debug('ET to do_auth() urlopen(): {} sec'.format(t1 - t0))
+        log.debug('ET to do_auth() request to URS: {} sec'.format(time() - t0))
         return loads(packet)
 
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
+        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         return False
 
 
@@ -102,19 +107,31 @@ def get_profile(user_id, token, temptoken=False):
     headers = {"Authorization": "Bearer " + headertoken}
     req = urllib.request.Request(url, None, headers)
 
+    t0 = time()
     try:
-        response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
-        packet = response.read()
-        user_profile = loads(packet)
 
+        response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
+        t1 = time()
+        packet = response.read()
+
+        user_profile = loads(packet)
+        t2 = time()
         store_session(user_id, token, user_profile)
+        t3 = time()
+        log.debug('ET for get_profile() urlopen() {} sec'.format(t1 - t0))
+        log.debug('ET for get_profile() response.read() and loads() {} sec'.format(t2 - t1))
+        log.debug('ET for get_profile() store_session() {} sec'.format(t3 - t2))
+
         return user_profile
 
     except urllib.error.URLError as e:
-        log.error("Error fetching profile: {0}".format(e))
+        log.warning("Error fetching profile: {0}".format(e))
+        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         if not temptoken: # This keeps get_new_token_and_profile() from calling this over and over
+            log.debug('because error above, going to get_new_token_and_profile()')
             return get_new_token_and_profile(user_id, token)
         else:
+            log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
             return {}
 
 
@@ -147,18 +164,24 @@ def get_new_token_and_profile(user_id, cookietoken):
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
+    t0 = time()
     try:
         log.info("Attempting to get new Token")
+
         response = urllib.request.urlopen(post_request)                              #nosec URL is *always* URS.
+        t1 = time()
         packet = response.read()
         new_token = loads(packet)['access_token']
+        t2 = time()
         log.info("Retrieved new token: {0}".format(new_token))
-
+        log.debug('ET for get_new_token_and_profile() urlopen() {} sec'.format(t1 - t0))
+        log.debug('ET for get_new_token_and_profile() response.read() and loads() {} sec'.format(t2- t1))
         # Get user profile with new token
         return get_profile(user_id, cookietoken, new_token)
 
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
+        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         return False
 
 def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
