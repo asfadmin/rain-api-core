@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers
+from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt
 from .aws_util import retrieve_secret
 from .session_util import store_session
 
@@ -293,9 +293,15 @@ def do_login(args, context, cookie_domain=''):
             redirect_to = args["state"]
         else:
             redirect_to = get_base_url(context)
-
+        jwt_cookie_payload = {
+            'urs-user-id': user_id,
+            'urs-access-token': auth['access_token'],
+            'urs-groups': ['TODO', 'PUT', 'LIST', 'OF', 'GROUPS', 'HERE'],
+            'created': time(),
+        }
         headers = {'Location': redirect_to}
         headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
+        headers.update(make_set_cookie_headers_jwt(jwt_cookie_payload, '', cookie_domain))
         return 301, {}, headers
 
     template_vars = {'contentstring': 'Could not get user profile from URS', 'title': 'Could Not Login'}

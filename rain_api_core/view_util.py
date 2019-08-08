@@ -1,17 +1,21 @@
 import logging
 import os
-
+import jwt
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
 from time import time
 
 from .session_util import sessttl
+from .aws_util import retrieve_secret
 
 log = logging.getLogger(__name__)
 
 html_template_status = ''
 html_template_local_cachedir = '/tmp/templates/'                                     #nosec We want to leverage instance persistance
+
+jwt_algo = os.getenv('JWT_ALGO', 'HS256')
+jwt_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', {}))
 
 
 def cache_html_templates():
@@ -66,7 +70,6 @@ def get_html_body(template_vars:dict, templatefile:str='root.html'):
     return jin_tmp.render(**template_vars)
 
 
-
 def get_cookie_vars(headers):
 
     cooks = get_cookies(headers)
@@ -77,25 +80,9 @@ def get_cookie_vars(headers):
     return {}
 
 
-
-
 def get_cookie_expiration_date_str():
 
     return format_7231_date(time() + sessttl)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def get_cookies(hdrs):
@@ -112,18 +99,39 @@ def get_cookies(hdrs):
     return cookies
 
 
+def make_jwt_payload(payload, algo=jwt_algo):
+
+    try:
+        return jwt.encode(payload, jwt_keys['rsa_priv_key'], algorithm=algo)
+    except IndexError as e:
+        log.error('jwt_keys may be malformed: ')
+        log.error(e)
+        return False
+    except (ValueError, AttributeError) as e:
+        log.error('problem with encoding cookie: {}'.format(e))
+        return False
 
 
+def craft_cookie_domain_payloadpiece(cookie_domain):
+    if cookie_domain:
+        return '; Domain={}'.format(cookie_domain)
+
+    return ''
 
 
+def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
+    jwt_payload = make_jwt_payload(payload)
+    cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
 
+    if not expdate:
+        expdate = get_cookie_expiration_date_str()
+    headers = {'SET-COOKIE': 'asf-urs={}; Expires={}; Path=/{}'.format(jwt_payload, expdate, cookie_domain_payloadpiece)}
+    return headers
 
 
 def make_set_cookie_headers(user_id, access_token, expdate='', cookie_domain=''):
-    if cookie_domain:
-        cookie_domain_payloadpiece = '; Domain={}'.format(cookie_domain)
-    else:
-        cookie_domain_payloadpiece = ''
+
+    cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
 
     log.debug('cookie domain: {}'.format(cookie_domain_payloadpiece))
     if not expdate:
@@ -134,7 +142,6 @@ def make_set_cookie_headers(user_id, access_token, expdate='', cookie_domain='')
     # specify your set-cookies with different alpha cases, you can actually send multiple.
     headers['Set-Cookie'] = 'urs-access-token={}; Expires={}; Path=/{}'.format(access_token, expdate, cookie_domain_payloadpiece)
     headers['set-cookie'] = 'urs-user-id={}; Expires={}; Path=/{}'.format(user_id, expdate, cookie_domain_payloadpiece)
-    #headers['SET-COOKIE'] = 'asf-auth={}; Expires={}; Path=/{}'.format(make_jwt_cookie({'asf': 'payload'}), get_cookie_expiration_date_str(), cookie_domain)
     log.debug('set-cookies: {}'.format(headers))
     return headers
 
