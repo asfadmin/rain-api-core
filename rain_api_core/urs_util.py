@@ -60,7 +60,7 @@ def do_auth(code, redirect_url):
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
         log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
-        return False
+        return {}
 
 
 def get_urs_url(ctxt, to=False):
@@ -293,12 +293,17 @@ def do_login(args, context, cookie_domain=''):
             redirect_to = args["state"]
         else:
             redirect_to = get_base_url(context)
+
+        if 'user_groups' not in user_profile:
+            user_profile['user_groups'] = []
+
         jwt_cookie_payload = {
             'urs-user-id': user_id,
             'urs-access-token': auth['access_token'],
-            'urs-groups': ['TODO', 'PUT', 'LIST', 'OF', 'GROUPS', 'HERE'],
+            'urs-groups': user_profile['user_groups'],
             'created': time(),
         }
+
         headers = {'Location': redirect_to}
         headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
         headers.update(make_set_cookie_headers_jwt(jwt_cookie_payload, '', cookie_domain))
