@@ -184,10 +184,24 @@ def get_new_token_and_profile(user_id, cookietoken):
         log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         return False
 
-def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
 
-    if not private_groups:
-        return False
+def user_in_group_list(private_groups, user_groups):
+    client_id = get_urs_creds()['UrsId']
+    log.info("Searching for private groups {0} in {1}".format(private_groups, user_groups))
+    for u_g in user_groups:
+        if u_g['client_id'] == client_id:
+            for p_g in private_groups:
+                if p_g == u_g['name']:
+                    # Found the matching group!
+                    log.info("User belongs to private group {}".format(p_g))
+                    return True
+
+
+def user_in_group_jwt():
+    raise NotImplementedError
+
+
+def user_in_group_urs(private_groups, cookievars, user_profile=None, refresh_first=False):
 
     user_id = cookievars['urs-user-id']
     token = cookievars['urs-access-token']
@@ -198,16 +212,9 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
     # check if the use has one of the groups from the private group list
 
-    if user_profile and 'user_groups' in user_profile:
-        client_id = get_urs_creds()['UrsId']
-        log.info ("Searching for private groups {0} in {1}".format( private_groups, user_profile['user_groups']))
-        for u_g in user_profile['user_groups']:
-            if u_g['client_id'] == client_id:
-                for p_g in private_groups:
-                    if p_g == u_g['name']:
-                        # Found the matching group!
-                        log.info("User {0} belongs to private group {1}".format(user_id, p_g))
-                        return True
+    if user_profile and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
+        log.info("User {0} belongs to private group".format(user_id))
+        return True
 
     # User likely isn't in ANY groups
     else:
@@ -221,6 +228,13 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
     log.warning("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
     return False
+
+
+def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
+    if not private_groups:
+        return False
+
+    return user_in_group_urs(private_groups, cookievars, user_profile, refresh_first)
 
 
 # return looks like:

@@ -1,6 +1,7 @@
 import logging
 import os
 import jwt
+import base64
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
@@ -15,7 +16,24 @@ html_template_status = ''
 html_template_local_cachedir = '/tmp/templates/'                                     #nosec We want to leverage instance persistance
 
 jwt_algo = os.getenv('JWT_ALGO', 'HS256')
-jwt_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', {}))
+jwt_keys = {}
+
+
+def get_jwt_keys():
+    global jwt_keys
+
+    if jwt_keys:
+        # Cached
+        return jwt_keys
+    raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
+
+    return_dict = {}
+
+    for k in raw_keys:
+        return_dict[k] = base64.b64decode(raw_keys[k].encode('utf-8'))
+
+    jwt_keys = return_dict  # Cache it
+    return return_dict
 
 
 def cache_html_templates():
@@ -74,10 +92,12 @@ def get_cookie_vars(headers):
 
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
+    vars = {}
     if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-        return {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']}
-
-    return {}
+        vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
+    if 'asf-urs' in cooks:
+        vars.update({'asf-urs': cooks['asf-urs']})
+    return vars
 
 
 def get_cookie_expiration_date_str():
@@ -102,14 +122,31 @@ def get_cookies(hdrs):
 def make_jwt_payload(payload, algo=jwt_algo):
 
     try:
-        return jwt.encode(payload, jwt_keys['rsa_priv_key'], algorithm=algo)
+        log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
+        encoded_bytes = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
+        encoded = encoded_bytes.decode('utf-8')
+        return encoded
     except IndexError as e:
         log.error('jwt_keys may be malformed: ')
         log.error(e)
-        return False
+        return {}
     except (ValueError, AttributeError) as e:
         log.error('problem with encoding cookie: {}'.format(e))
-        return False
+        return {}
+
+
+def decode_jwt_payload(jwt_payload, algo=jwt_algo):
+    log.debug('pub key: "{}"'.format(jwt_keys['rsa_pub_key']))
+    try:
+        cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
+    except jwt.ExpiredSignatureError as e:
+        # Signature has expired
+        log.error('JWT has expired')
+        # TODO what to do with this?
+        return {}
+
+    log.debug('cookiedecoded {}'.format(cookiedecoded))
+    return cookiedecoded
 
 
 def craft_cookie_domain_payloadpiece(cookie_domain):
