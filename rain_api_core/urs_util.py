@@ -294,7 +294,7 @@ def do_login(args, context, cookie_domain=''):
         else:
             redirect_to = get_base_url(context)
 
-        if 'user_groups' not in user_profile:
+        if 'user_groups' not in user_profile or not user_profile['user_groups']:
             user_profile['user_groups'] = []
 
         jwt_cookie_payload = {
