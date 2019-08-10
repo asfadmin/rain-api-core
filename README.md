@@ -23,7 +23,8 @@ Its payload looks something like this:
       "name": "<Name of group>"
     },
   ],
-  "created": 1565294120.6796808
+  "iat": 1565294120,
+  "exp: 1565299000
 }
 
 ```
