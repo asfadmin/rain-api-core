@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 html_template_status = ''
 html_template_local_cachedir = '/tmp/templates/'                                     #nosec We want to leverage instance persistance
 
-jwt_algo = os.getenv('JWT_ALGO', 'HS256')
+jwt_algo = os.getenv('JWT_ALGO', 'RS256')
 jwt_keys = {}
 
 
@@ -100,9 +100,13 @@ def get_cookie_vars(headers):
     return vars
 
 
+def get_exp_time():
+    return int(time() + sessttl)
+
+
 def get_cookie_expiration_date_str():
 
-    return format_7231_date(time() + sessttl)
+    return format_7231_date(get_exp_time())
 
 
 def get_cookies(hdrs):
