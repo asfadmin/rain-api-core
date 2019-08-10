@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt
+from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time
 from .aws_util import retrieve_secret
 from .session_util import store_session
 
@@ -315,7 +315,8 @@ def do_login(args, context, cookie_domain=''):
             'urs-user-id': user_id,
             'urs-access-token': auth['access_token'],
             'urs-groups': user_profile['user_groups'],
-            'created': time(),
+            'iat': int(time()),
+            'exp': get_exp_time(),
         }
 
         headers = {'Location': redirect_to}
