@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time
+from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time, decode_jwt_payload
 from .aws_util import retrieve_secret
 from .session_util import store_session
 
@@ -197,20 +197,7 @@ def user_in_group_list(private_groups, user_groups):
                     return True
 
 
-def user_in_group_jwt():
-    raise NotImplementedError
-
-
-def user_in_group_urs(private_groups, cookievars, user_profile=None, refresh_first=False):
-
-    user_id = cookievars['urs-user-id']
-    token = cookievars['urs-access-token']
-
-    # initially, we want to try to see if the user is in the group before refresh
-    if refresh_first or not user_profile:
-        user_profile = get_profile(user_id, token)
-
-    # check if the use has one of the groups from the private group list
+def user_in_group_urs(private_groups, user_id, user_profile=None, refresh_first=False):
 
     if user_profile and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
         log.info("User {0} belongs to private group".format(user_id))
@@ -224,7 +211,7 @@ def user_in_group_urs(private_groups, cookievars, user_profile=None, refresh_fir
         # maybe refreshing the user's profile will help
         log.info("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id,
                                                                                                           private_groups))
-        return user_in_group(private_groups, cookievars, {}, refresh_first=True)
+        return user_in_group_urs(private_groups, user_id, {}, refresh_first=True)
 
     log.warning("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
     return False
@@ -234,7 +221,33 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
     if not private_groups:
         return False
 
-    return user_in_group_urs(private_groups, cookievars, user_profile, refresh_first)
+    try:
+        jwt = cookievars['asf-urs']
+
+    except (KeyError, IndexError) as e:
+        log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
+        if refresh_first or not user_profile:
+            user_profile = get_profile(cookievars['urs-user-id'], cookievars['urs-access-token'])
+
+        return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first)
+    else:
+
+        jwt_payload = decode_jwt_payload(jwt)
+
+        if refresh_first:
+            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            # TODO: reset fresh group-membership JWT cookie now? Somehow?
+
+        in_group = user_in_group_list(private_groups, jwt_payload['user_groups'])
+        if in_group:
+            return True
+        elif not in_group and not refresh_first:
+            # TODO: look at ['iat'] and if cookie is recent enough (how recent?), don't bother doing this.
+            # one last ditch effort to see if they were so very recently added to group:
+            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            return user_in_group(private_groups, cookievars, {}, refresh_first=True)
+        else:
+            return False
 
 
 # return looks like:
