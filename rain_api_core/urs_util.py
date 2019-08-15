@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time, decode_jwt_payload
+from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time
 from .aws_util import retrieve_secret
 from .session_util import store_session
 
@@ -222,7 +222,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         return False
 
     try:
-        jwt = cookievars['asf-urs']
+        jwt_payload = cookievars['asf-urs']
 
     except (KeyError, IndexError) as e:
         log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
@@ -231,8 +231,6 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
         return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first)
     else:
-
-        jwt_payload = decode_jwt_payload(jwt)
 
         if refresh_first:
             jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']

@@ -96,7 +96,7 @@ def get_cookie_vars(headers):
     if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
         vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
     if 'asf-urs' in cooks:
-        vars.update({'asf-urs': cooks['asf-urs']})
+        vars.update({'asf-urs': decode_jwt_payload(cooks['asf-urs'])})
     return vars
 
 
