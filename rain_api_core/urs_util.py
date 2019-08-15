@@ -71,7 +71,7 @@ def get_urs_url(ctxt, to=False):
     client_id = get_urs_creds()['UrsId']
 
     log.debug('domain name: %s' % os.getenv('DOMAIN_NAME', 'no domainname set'))
-    log.debug('if no domain name set: {}/{}'.format(ctxt['domainName'], ctxt['stage']))
+    log.debug('if no domain name set: {}.execute-api.{}.amazonaws.com/{}'.format(ctxt['apiId'], os.getenv('AWS_DEFAULT_REGION', '<region>'), ctxt['stage']))
 
     urs_url = '{0}?client_id={1}&response_type=code&redirect_uri={2}'.format(base_url, client_id, get_redirect_url(ctxt))
     if to:
@@ -238,7 +238,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
             jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
             # TODO: reset fresh group-membership JWT cookie now? Somehow?
 
-        in_group = user_in_group_list(private_groups, jwt_payload['user_groups'])
+        in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
         if in_group:
             return True
         elif not in_group and not refresh_first:

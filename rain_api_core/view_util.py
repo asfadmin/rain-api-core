@@ -140,7 +140,7 @@ def make_jwt_payload(payload, algo=jwt_algo):
 
 
 def decode_jwt_payload(jwt_payload, algo=jwt_algo):
-    log.debug('pub key: "{}"'.format(jwt_keys['rsa_pub_key']))
+    log.debug('pub key: "{}"'.format(get_jwt_keys()['rsa_pub_key']))
     try:
         cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
     except jwt.ExpiredSignatureError as e:
