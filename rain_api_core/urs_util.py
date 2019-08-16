@@ -323,6 +323,9 @@ def do_login(args, context, cookie_domain=''):
             user_profile['user_groups'] = []
 
         jwt_cookie_payload = {
+            # Do we want more items in here?
+            'first_name': user_profile['first_name'],
+            'last_name': user_profile['last_name'],
             'urs-user-id': user_id,
             'urs-access-token': auth['access_token'],
             'urs-groups': user_profile['user_groups'],
