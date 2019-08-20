@@ -93,9 +93,9 @@ def get_cookie_vars(headers):
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
     vars = {}
-    if 'asf-urs' in cooks:
-        decoded_payload = decode_jwt_payload(cooks['asf-urs'])
-        vars.update({'asf-urs': decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
+    if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
+        decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
+        vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
     elif 'urs-user-id' in cooks and 'urs-access-token' in cooks:
         vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
 
@@ -168,7 +168,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
     if not expdate:
         expdate = get_cookie_expiration_date_str()
-    headers = {'SET-COOKIE': 'asf-urs={}; Expires={}; Path=/{}'.format(jwt_payload, expdate, cookie_domain_payloadpiece)}
+    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'), jwt_payload, expdate, cookie_domain_payloadpiece)}
     return headers
 
 

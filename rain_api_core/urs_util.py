@@ -222,7 +222,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         return False
 
     try:
-        jwt_payload = cookievars['asf-urs']
+        jwt_payload = cookievars[os.getenv('JWT_COOKIENAME','asf-urs')]
 
     except (KeyError, IndexError) as e:
         log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
