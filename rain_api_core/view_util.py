@@ -135,10 +135,10 @@ def make_jwt_payload(payload, algo=jwt_algo):
     except IndexError as e:
         log.error('jwt_keys may be malformed: ')
         log.error(e)
-        return {}
+        return ''
     except (ValueError, AttributeError) as e:
         log.error('problem with encoding cookie: {}'.format(e))
-        return {}
+        return ''
 
 
 def decode_jwt_payload(jwt_payload, algo=jwt_algo):
