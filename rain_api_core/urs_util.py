@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers
+from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time
 from .aws_util import retrieve_secret
 from .session_util import store_session
 
@@ -60,7 +60,7 @@ def do_auth(code, redirect_url):
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
         log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
-        return False
+        return {}
 
 
 def get_urs_url(ctxt, to=False):
@@ -71,7 +71,7 @@ def get_urs_url(ctxt, to=False):
     client_id = get_urs_creds()['UrsId']
 
     log.debug('domain name: %s' % os.getenv('DOMAIN_NAME', 'no domainname set'))
-    log.debug('if no domain name set: {}/{}'.format(ctxt['domainName'], ctxt['stage']))
+    log.debug('if no domain name set: {}.execute-api.{}.amazonaws.com/{}'.format(ctxt['apiId'], os.getenv('AWS_DEFAULT_REGION', '<region>'), ctxt['stage']))
 
     urs_url = '{0}?client_id={1}&response_type=code&redirect_uri={2}'.format(base_url, client_id, get_redirect_url(ctxt))
     if to:
@@ -184,30 +184,24 @@ def get_new_token_and_profile(user_id, cookietoken):
         log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         return False
 
-def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
 
-    if not private_groups:
-        return False
+def user_in_group_list(private_groups, user_groups):
+    client_id = get_urs_creds()['UrsId']
+    log.info("Searching for private groups {0} in {1}".format(private_groups, user_groups))
+    for u_g in user_groups:
+        if u_g['client_id'] == client_id:
+            for p_g in private_groups:
+                if p_g == u_g['name']:
+                    # Found the matching group!
+                    log.info("User belongs to private group {}".format(p_g))
+                    return True
 
-    user_id = cookievars['urs-user-id']
-    token = cookievars['urs-access-token']
 
-    # initially, we want to try to see if the user is in the group before refresh
-    if refresh_first or not user_profile:
-        user_profile = get_profile(user_id, token)
+def user_in_group_urs(private_groups, user_id, user_profile=None, refresh_first=False):
 
-    # check if the use has one of the groups from the private group list
-
-    if user_profile and 'user_groups' in user_profile:
-        client_id = get_urs_creds()['UrsId']
-        log.info ("Searching for private groups {0} in {1}".format( private_groups, user_profile['user_groups']))
-        for u_g in user_profile['user_groups']:
-            if u_g['client_id'] == client_id:
-                for p_g in private_groups:
-                    if p_g == u_g['name']:
-                        # Found the matching group!
-                        log.info("User {0} belongs to private group {1}".format(user_id, p_g))
-                        return True
+    if user_profile and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
+        log.info("User {0} belongs to private group".format(user_id))
+        return True
 
     # User likely isn't in ANY groups
     else:
@@ -217,10 +211,41 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         # maybe refreshing the user's profile will help
         log.info("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id,
                                                                                                           private_groups))
-        return user_in_group(private_groups, cookievars, {}, refresh_first=True)
+        return user_in_group_urs(private_groups, user_id, {}, refresh_first=True)
 
     log.warning("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
     return False
+
+
+def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
+    if not private_groups:
+        return False
+
+    try:
+        jwt_payload = cookievars[os.getenv('JWT_COOKIENAME','asf-urs')]
+
+    except (KeyError, IndexError) as e:
+        log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
+        if refresh_first or not user_profile:
+            user_profile = get_profile(cookievars['urs-user-id'], cookievars['urs-access-token'])
+
+        return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first)
+    else:
+
+        if refresh_first:
+            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            # TODO: reset fresh group-membership JWT cookie now? Somehow?
+
+        in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
+        if in_group:
+            return True
+        elif not in_group and not refresh_first:
+            # TODO: look at ['iat'] and if cookie is recent enough (how recent?), don't bother doing this.
+            # one last ditch effort to see if they were so very recently added to group:
+            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            return user_in_group(private_groups, cookievars, {}, refresh_first=True)
+        else:
+            return False
 
 
 # return looks like:
@@ -294,8 +319,23 @@ def do_login(args, context, cookie_domain=''):
         else:
             redirect_to = get_base_url(context)
 
+        if 'user_groups' not in user_profile or not user_profile['user_groups']:
+            user_profile['user_groups'] = []
+
+        jwt_cookie_payload = {
+            # Do we want more items in here?
+            'first_name': user_profile['first_name'],
+            'last_name': user_profile['last_name'],
+            'urs-user-id': user_id,
+            'urs-access-token': auth['access_token'],
+            'urs-groups': user_profile['user_groups'],
+            'iat': int(time()),
+            'exp': get_exp_time(),
+        }
+
         headers = {'Location': redirect_to}
         headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
+        headers.update(make_set_cookie_headers_jwt(jwt_cookie_payload, '', cookie_domain))
         return 301, {}, headers
 
     template_vars = {'contentstring': 'Could not get user profile from URS', 'title': 'Could Not Login'}

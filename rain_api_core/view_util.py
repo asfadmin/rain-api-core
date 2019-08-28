@@ -1,17 +1,39 @@
 import logging
 import os
-
+import jwt
+import base64
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
 from time import time
 
 from .session_util import sessttl
+from .aws_util import retrieve_secret
 
 log = logging.getLogger(__name__)
 
 html_template_status = ''
 html_template_local_cachedir = '/tmp/templates/'                                     #nosec We want to leverage instance persistance
+
+jwt_algo = os.getenv('JWT_ALGO', 'RS256')
+jwt_keys = {}
+
+
+def get_jwt_keys():
+    global jwt_keys
+
+    if jwt_keys:
+        # Cached
+        return jwt_keys
+    raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
+
+    return_dict = {}
+
+    for k in raw_keys:
+        return_dict[k] = base64.b64decode(raw_keys[k].encode('utf-8'))
+
+    jwt_keys = return_dict  # Cache it
+    return return_dict
 
 
 def cache_html_templates():
@@ -66,36 +88,27 @@ def get_html_body(template_vars:dict, templatefile:str='root.html'):
     return jin_tmp.render(**template_vars)
 
 
-
 def get_cookie_vars(headers):
 
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
-    if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-        return {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']}
+    vars = {}
+    if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
+        decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
+        vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
+    elif 'urs-user-id' in cooks and 'urs-access-token' in cooks:
+        vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
 
-    return {}
+    return vars
 
 
+def get_exp_time():
+    return int(time() + sessttl)
 
 
 def get_cookie_expiration_date_str():
 
-    return format_7231_date(time() + sessttl)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return format_7231_date(get_exp_time())
 
 
 def get_cookies(hdrs):
@@ -112,18 +125,56 @@ def get_cookies(hdrs):
     return cookies
 
 
+def make_jwt_payload(payload, algo=jwt_algo):
+
+    try:
+        log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
+        encoded_bytes = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
+        encoded = encoded_bytes.decode('utf-8')
+        return encoded
+    except IndexError as e:
+        log.error('jwt_keys may be malformed: ')
+        log.error(e)
+        return ''
+    except (ValueError, AttributeError) as e:
+        log.error('problem with encoding cookie: {}'.format(e))
+        return ''
 
 
+def decode_jwt_payload(jwt_payload, algo=jwt_algo):
+    log.debug('pub key: "{}"'.format(get_jwt_keys()['rsa_pub_key']))
+    try:
+        cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
+    except jwt.ExpiredSignatureError as e:
+        # Signature has expired
+        log.error('JWT has expired')
+        # TODO what to do with this?
+        return {}
+
+    log.debug('cookiedecoded {}'.format(cookiedecoded))
+    return cookiedecoded
 
 
+def craft_cookie_domain_payloadpiece(cookie_domain):
+    if cookie_domain:
+        return '; Domain={}'.format(cookie_domain)
 
+    return ''
+
+
+def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
+    jwt_payload = make_jwt_payload(payload)
+    cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
+
+    if not expdate:
+        expdate = get_cookie_expiration_date_str()
+    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'), jwt_payload, expdate, cookie_domain_payloadpiece)}
+    return headers
 
 
 def make_set_cookie_headers(user_id, access_token, expdate='', cookie_domain=''):
-    if cookie_domain:
-        cookie_domain_payloadpiece = '; Domain={}'.format(cookie_domain)
-    else:
-        cookie_domain_payloadpiece = ''
+
+    cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
 
     log.debug('cookie domain: {}'.format(cookie_domain_payloadpiece))
     if not expdate:
@@ -134,7 +185,6 @@ def make_set_cookie_headers(user_id, access_token, expdate='', cookie_domain='')
     # specify your set-cookies with different alpha cases, you can actually send multiple.
     headers['Set-Cookie'] = 'urs-access-token={}; Expires={}; Path=/{}'.format(access_token, expdate, cookie_domain_payloadpiece)
     headers['set-cookie'] = 'urs-user-id={}; Expires={}; Path=/{}'.format(user_id, expdate, cookie_domain_payloadpiece)
-    #headers['SET-COOKIE'] = 'asf-auth={}; Expires={}; Path=/{}'.format(make_jwt_cookie({'asf': 'payload'}), get_cookie_expiration_date_str(), cookie_domain)
     log.debug('set-cookies: {}'.format(headers))
     return headers
 
