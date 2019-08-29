@@ -218,8 +218,12 @@ def user_in_group_urs(private_groups, user_id, user_profile=None, refresh_first=
 
 
 def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
+
+    # If a new profile is fetched, it is assigned to this var, and returned so that a fresh jwt cookie can be set.
+    new_profile = {}
+
     if not private_groups:
-        return False
+        return False, new_profile
 
     try:
         jwt_payload = cookievars[os.getenv('JWT_COOKIENAME','asf-urs')]
@@ -227,25 +231,26 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
     except (KeyError, IndexError) as e:
         log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
         if refresh_first or not user_profile:
-            user_profile = get_profile(cookievars['urs-user-id'], cookievars['urs-access-token'])
+            new_profile = get_profile(cookievars['urs-user-id'], cookievars['urs-access-token'])
 
-        return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first)
+        return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first), new_profile
     else:
 
         if refresh_first:
-            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])
+            jwt_payload['user_groups'] = new_profile['user_groups']
             # TODO: reset fresh group-membership JWT cookie now? Somehow?
 
         in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
         if in_group:
-            return True
+            return True, new_profile
         elif not in_group and not refresh_first:
             # TODO: look at ['iat'] and if cookie is recent enough (how recent?), don't bother doing this.
             # one last ditch effort to see if they were so very recently added to group:
             jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
             return user_in_group(private_groups, cookievars, {}, refresh_first=True)
         else:
-            return False
+            return False, new_profile
 
 
 # return looks like:
@@ -266,6 +271,17 @@ def get_urs_creds():
 
     return secret
 
+def user_profile_2_jwt_payload(user_id, access_token, user_profile):
+    return {
+            # Do we want more items in here?
+            'first_name': user_profile['first_name'],
+            'last_name': user_profile['last_name'],
+            'urs-user-id': user_id,
+            'urs-access-token': access_token,
+            'urs-groups': user_profile['user_groups'],
+            'iat': int(time()),
+            'exp': get_exp_time(),
+        }
 
 # This do_login() is mainly for chalice clients.
 def do_login(args, context, cookie_domain=''):
@@ -322,16 +338,7 @@ def do_login(args, context, cookie_domain=''):
         if 'user_groups' not in user_profile or not user_profile['user_groups']:
             user_profile['user_groups'] = []
 
-        jwt_cookie_payload = {
-            # Do we want more items in here?
-            'first_name': user_profile['first_name'],
-            'last_name': user_profile['last_name'],
-            'urs-user-id': user_id,
-            'urs-access-token': auth['access_token'],
-            'urs-groups': user_profile['user_groups'],
-            'iat': int(time()),
-            'exp': get_exp_time(),
-        }
+        jwt_cookie_payload = user_profile_2_jwt_payload(user_id, auth['access_token'], user_profile)
 
         headers = {'Location': redirect_to}
         headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
