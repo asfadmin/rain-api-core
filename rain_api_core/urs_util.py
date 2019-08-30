@@ -197,23 +197,24 @@ def user_in_group_list(private_groups, user_groups):
                     return True
 
 
-def user_in_group_urs(private_groups, user_id, user_profile=None, refresh_first=False):
+def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh_first=False):
 
-    if user_profile and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
+    if refresh_first or not user_profile:
+        user_profile = get_profile(user_id, token)
+
+    if isinstance(user_profile, dict) and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
         log.info("User {0} belongs to private group".format(user_id))
         return True
 
-    # User likely isn't in ANY groups
     else:
-        log.warning('user_groups block not found in user profile!')
+        # Couldn't find user in provided groups, but we may as well look at a fresh group list:
+        if not refresh_first:
+            # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
+            log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
 
-    if not refresh_first:
-        # maybe refreshing the user's profile will help
-        log.info("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id,
-                                                                                                          private_groups))
-        return user_in_group_urs(private_groups, user_id, {}, refresh_first=True)
+            return user_in_group_urs(private_groups, user_id, {}, refresh_first=True)
+        log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
 
-    log.warning("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
     return False
 
 
@@ -230,12 +231,10 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
 
     except (KeyError, IndexError) as e:
         log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
-        if refresh_first or not user_profile:
-            new_profile = get_profile(cookievars['urs-user-id'], cookievars['urs-access-token'])
 
-        return user_in_group_urs(private_groups, cookievars['urs-user-id'], user_profile, refresh_first), new_profile
+        return user_in_group_urs(private_groups, cookievars['urs-user-id'], cookievars['urs-access-token'], user_profile, refresh_first), new_profile
+
     else:
-
         if refresh_first:
             new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])
             jwt_payload['user_groups'] = new_profile['user_groups']
