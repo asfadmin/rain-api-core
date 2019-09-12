@@ -2,6 +2,8 @@
 import logging
 import os
 import sys
+import urllib
+from netaddr import IPAddress, IPNetwork
 from json import loads
 from time import time
 from yaml import safe_load
@@ -11,6 +13,21 @@ from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
 secret_cache = {}
+region_list_cache = []
+
+def get_region():
+    url = 'http://169.254.169.254/latest/dynamic/instance-identity/document'
+    try:
+        req = urllib.request.Request(url)
+        log.debug("Downloading region data from inside AWS")
+        r = urllib.request.urlopen(req, timeout=1.5).read()
+        return loads(r.decode('utf-8'))["region"]
+    except Exception as e:                                                                 #pylint: disable=broad-except
+        log.warning("Could not download region metadata, using us-east-1: {0}".format(e))
+        return "us-east-1"
+
+
+aws_region = get_region()
 
 def retrieve_secret(secret_name):
 
@@ -131,3 +148,36 @@ def get_role_session(creds=None, user_id=None):
         aws_session_token=sts_resp['Credentials']['SessionToken'])
 
     return session
+
+
+def get_region_cidr_ranges():
+    # Utility function to download AWS regions
+
+    global region_list_cache                                                                 #pylint: disable=global-statement
+
+    if not region_list_cache:                                                          #pylint: disable=used-before-assignment
+        url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
+        req = urllib.request.Request(url)
+        r = urllib.request.urlopen(req).read()
+
+        region_list_json = loads(r.decode('utf-8'))
+        region_list_cache = []
+
+        # Sort out ONLY values from this AWS region
+        for pre in region_list_json["prefixes"]:
+            if "ip_prefix" in pre and "region" in pre:
+                if pre["region"] == aws_region:
+                    region_list_cache.append(IPNetwork(pre["ip_prefix"]))
+
+    return region_list_cache
+
+
+def check_in_region_request(ip_addr:str):
+
+    for cidr in get_region_cidr_ranges(): # TODO: use cached value for this
+        #log.debug("Checking ip {0} vs cidr {1}".format(user_ip, cidr))
+        if IPAddress(ip_addr) in cidr:
+            log.info("IP {0} matched in-region CIDR {1}".format(ip_addr, cidr))
+            return True
+
+    return False
