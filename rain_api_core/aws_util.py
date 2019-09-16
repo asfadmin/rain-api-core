@@ -17,6 +17,11 @@ region_list_cache = []
 
 
 def get_region():
+    """
+    Will determine and return current AWS region.
+    :return: string describing AWS region
+    :type: string
+    """
     url = 'http://169.254.169.254/latest/dynamic/instance-identity/document'
     try:
         req = urllib.request.Request(url)
