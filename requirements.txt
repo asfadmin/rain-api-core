@@ -7,4 +7,4 @@ cryptography
 pyjwt
 pyOpenSSL # maybe not necessary
 python-jose
-jwcrypto
+jwcrypto==0.6.0
