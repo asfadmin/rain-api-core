@@ -88,17 +88,22 @@ def get_html_body(template_vars:dict, templatefile:str='root.html'):
     return jin_tmp.render(**template_vars)
 
 
-def get_cookie_vars(headers):
-
+def get_cookie_vars(headers:dict):
+    """
+    Extracts and decodes and returns relevant cookies from http headers
+    :param headers: dict of http headers
+    :return: on success dict with keys env value of 'JWT_COOKIENAME' containing decoded jwt, 'urs-user-id', 'urs-access-token' on failure empty dict.
+    :type: dict
+    """
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
     vars = {}
     try:
         if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
             decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
-            vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
-        elif 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-            vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
+            vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
+        if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
+            vars.update({'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
     except KeyError as e:
         log.debug('Key error trying to get cookie vars: {}'.format(e))
         vars = {}
