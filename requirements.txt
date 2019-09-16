@@ -4,7 +4,7 @@ aws-requests-auth
 chalice
 netaddr
 cryptography
-pyjwt
+pyjwt==1.7.1
 pyOpenSSL # maybe not necessary
 python-jose
 jwcrypto
