@@ -2,7 +2,7 @@ jinja2
 PyYAML
 aws-requests-auth
 chalice
-netaddr
+netaddr==0.7.19
 cryptography
 pyjwt
 pyOpenSSL # maybe not necessary
