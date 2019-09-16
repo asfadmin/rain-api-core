@@ -3,7 +3,7 @@ PyYAML
 aws-requests-auth
 chalice
 netaddr
-cryptography
+cryptography==2.7
 pyjwt
 pyOpenSSL # maybe not necessary
 python-jose
