@@ -22,18 +22,7 @@ def get_region():
     :return: string describing AWS region
     :type: string
     """
-    url = 'http://169.254.169.254/latest/dynamic/instance-identity/document'
-    try:
-        req = urllib.request.Request(url)
-        log.debug("Downloading region data from inside AWS")
-        r = urllib.request.urlopen(req, timeout=1.5).read()                         #nosec URL is *always* http://169...
-        return loads(r.decode('utf-8'))["region"]
-    except Exception as e:                                                                 #pylint: disable=broad-except
-        log.warning("Could not download region metadata, using us-east-1: {0}".format(e))
-        return "us-east-1"
-
-
-aws_region = get_region()
+    return botosession.Session().region_name
 
 
 def retrieve_secret(secret_name):
@@ -186,7 +175,7 @@ def get_region_cidr_ranges():
         # Sort out ONLY values from this AWS region
         for pre in region_list_json["prefixes"]:
             if "ip_prefix" in pre and "region" in pre:
-                if pre["region"] == aws_region:
+                if pre["region"] == get_region():
                     region_list_cache.append(IPNetwork(pre["ip_prefix"]))
 
     return region_list_cache
