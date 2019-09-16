@@ -1,0 +1,10 @@
+jinja2
+PyYAML
+aws-requests-auth
+chalice
+netaddr
+cryptography
+pyjwt
+pyOpenSSL # maybe not necessary
+python-jose
+jwcrypto
