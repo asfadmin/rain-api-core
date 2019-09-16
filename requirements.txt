@@ -5,6 +5,6 @@ chalice
 netaddr
 cryptography
 pyjwt
-pyOpenSSL # maybe not necessary
+pyOpenSSL==19.0.0 # maybe not necessary
 python-jose
 jwcrypto
