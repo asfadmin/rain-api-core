@@ -21,7 +21,7 @@ def get_region():
     try:
         req = urllib.request.Request(url)
         log.debug("Downloading region data from inside AWS")
-        r = urllib.request.urlopen(req, timeout=1.5).read()                                        #pylint: disable=B310
+        r = urllib.request.urlopen(req, timeout=1.5).read()                         #nosec URL is *always* http://169...
         return loads(r.decode('utf-8'))["region"]
     except Exception as e:                                                                 #pylint: disable=broad-except
         log.warning("Could not download region metadata, using us-east-1: {0}".format(e))
@@ -173,7 +173,7 @@ def get_region_cidr_ranges():
     if not region_list_cache:                                                    #pylint: disable=used-before-assignment
         url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
         req = urllib.request.Request(url)
-        r = urllib.request.urlopen(req).read()                                                     #pylint: disable=B310
+        r = urllib.request.urlopen(req).read()                               #nosec URL is *always* https://ip-ranges...
 
         region_list_json = loads(r.decode('utf-8'))
         region_list_cache = []
