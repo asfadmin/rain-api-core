@@ -6,5 +6,5 @@ netaddr
 cryptography
 pyjwt
 pyOpenSSL # maybe not necessary
-python-jose
+python-jose==3.0.1
 jwcrypto
