@@ -93,12 +93,15 @@ def get_cookie_vars(headers):
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
     vars = {}
-    if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
-        decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
-        vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
-    elif 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-        vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
-
+    try:
+        if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
+            decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
+            vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload, 'urs-user-id': decoded_payload['urs-user-id'], 'urs-access-token': decoded_payload['urs-access-token']})
+        elif 'urs-user-id' in cooks and 'urs-access-token' in cooks:
+            vars.update( {'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
+    except KeyError as e:
+        log.debug('Key error trying to get cookie vars: {}'.format(e))
+        vars = {}
     return vars
 
 
@@ -147,10 +150,12 @@ def decode_jwt_payload(jwt_payload, algo=jwt_algo):
         cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
     except jwt.ExpiredSignatureError as e:
         # Signature has expired
-        log.error('JWT has expired')
+        log.info('JWT has expired')
         # TODO what to do with this?
         return {}
-
+    except jwt.InvalidSignatureError as e:
+        log.info('JWT has failed verification. returning empty dict')
+        return {}
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
 
