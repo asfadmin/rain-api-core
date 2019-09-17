@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 log = logging.getLogger(__name__)
 secret_cache = {}
 region_list_cache = []
-
+region = ''
 
 def get_region():
     """
@@ -22,7 +22,10 @@ def get_region():
     :return: string describing AWS region
     :type: string
     """
-    return botosession.Session().region_name
+    global region
+    if not region:
+        region = botosession.Session().region_name
+    return region
 
 
 def retrieve_secret(secret_name):
