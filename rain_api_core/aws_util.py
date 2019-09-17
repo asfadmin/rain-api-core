@@ -22,7 +22,7 @@ def get_region():
     :return: string describing AWS region
     :type: string
     """
-    global region
+    global region                                                                      #pylint: disable=global-statement
     if not region:
         region = botosession.Session().region_name
     return region
