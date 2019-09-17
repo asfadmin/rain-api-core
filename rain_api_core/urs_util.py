@@ -13,8 +13,6 @@ from .session_util import store_session
 log = logging.getLogger(__name__)
 
 
-
-
 def get_base_url(ctxt=False):
     # Make a redirect url using optional custom domain_name, otherwise use raw domain/stage provided by API Gateway.
     try:
@@ -255,13 +253,16 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
             return False, new_profile
 
 
-# return looks like:
-# {
-#     "UrsId": "stringofseeminglyrandomcharacters",
-#     "UrsAuth": "verymuchlongerstringofseeminglyrandomcharacters"
-# }
 def get_urs_creds():
-
+    """
+    Fetches URS creds from secrets manager.
+    :return: looks like:
+            {
+                "UrsId": "stringofseeminglyrandomcharacters",
+                "UrsAuth": "verymuchlongerstringofseeminglyrandomcharacters"
+            }
+    :type: dict
+    """
     secret_name = os.getenv('URS_CREDS_SECRET_NAME', None)
 
     if not secret_name:
@@ -272,6 +273,7 @@ def get_urs_creds():
         log.error('AWS secret {} does not contain required keys "UrsId" and "UrsAuth"'.format(secret_name))
 
     return secret
+
 
 def user_profile_2_jwt_payload(user_id, access_token, user_profile):
     return {
@@ -284,6 +286,7 @@ def user_profile_2_jwt_payload(user_id, access_token, user_profile):
             'iat': int(time()),
             'exp': get_exp_time(),
         }
+
 
 # This do_login() is mainly for chalice clients.
 def do_login(args, context, cookie_domain=''):
