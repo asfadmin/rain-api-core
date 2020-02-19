@@ -7,4 +7,4 @@ cryptography==2.7
 pyjwt==1.7.1
 pyOpenSSL==19.0.0 # maybe not necessary
 python-jose==3.0.1
-jwcrypto==0.6.0
+jwcrypto==0.7
