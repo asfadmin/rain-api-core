@@ -67,7 +67,7 @@ def cache_html_templates():
         return 'ERROR'
 
 
-def get_html_body(template_vars:dict, templatefile:str='root.html'):
+def get_html_body(template_vars: dict, templatefile: str='root.html'):
 
     global html_template_status                                                       # pylint: disable=global-statement
 
@@ -88,7 +88,7 @@ def get_html_body(template_vars:dict, templatefile:str='root.html'):
     return jin_tmp.render(**template_vars)
 
 
-def get_cookie_vars(headers:dict):
+def get_cookie_vars(headers: dict):
     """
     Extracts and decodes and returns relevant cookies from http headers
     :param headers: dict of http headers
@@ -97,17 +97,18 @@ def get_cookie_vars(headers:dict):
     """
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
-    vars = {}
+    cookie_vars = {}
     try:
         if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
             decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
-            vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
-        if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-            vars.update({'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
+            cookie_vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
+        else:
+            log.debug('could not find jwt cookie in get_cookie_vars()')
+            cookie_vars = {}
     except KeyError as e:
         log.debug('Key error trying to get cookie vars: {}'.format(e))
-        vars = {}
-    return vars
+        cookie_vars = {}
+    return cookie_vars
 
 
 def get_exp_time():
