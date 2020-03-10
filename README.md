@@ -29,8 +29,3 @@ Its payload looks something like this:
 
 ```
 
-### urs-user-id
-This contains the logged in user's URS user ID. 
-
-### urs-access-token 
-This contains the logged in user's URS access token. 
