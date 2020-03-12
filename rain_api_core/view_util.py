@@ -13,7 +13,7 @@ from .aws_util import retrieve_secret
 log = logging.getLogger(__name__)
 
 html_template_status = ''
-html_template_local_cachedir = '/tmp/templates/'                                     #nosec We want to leverage instance persistance
+html_template_local_cachedir = '/tmp/templates/'                         #nosec We want to leverage instance persistance
 
 jwt_algo = os.getenv('JWT_ALGO', 'RS256')
 jwt_keys = {}
@@ -67,7 +67,7 @@ def cache_html_templates():
         return 'ERROR'
 
 
-def get_html_body(template_vars:dict, templatefile:str='root.html'):
+def get_html_body(template_vars: dict, templatefile: str='root.html'):
 
     global html_template_status                                                       # pylint: disable=global-statement
 
@@ -88,7 +88,7 @@ def get_html_body(template_vars:dict, templatefile:str='root.html'):
     return jin_tmp.render(**template_vars)
 
 
-def get_cookie_vars(headers:dict):
+def get_cookie_vars(headers: dict):
     """
     Extracts and decodes and returns relevant cookies from http headers
     :param headers: dict of http headers
@@ -97,17 +97,18 @@ def get_cookie_vars(headers:dict):
     """
     cooks = get_cookies(headers)
     log.debug('cooks: {}'.format(cooks))
-    vars = {}
+    cookie_vars = {}
     try:
         if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
             decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
-            vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
-        if 'urs-user-id' in cooks and 'urs-access-token' in cooks:
-            vars.update({'urs-user-id': cooks['urs-user-id'], 'urs-access-token': cooks['urs-access-token']} )
+            cookie_vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
+        else:
+            log.debug('could not find jwt cookie in get_cookie_vars()')
+            cookie_vars = {}
     except KeyError as e:
         log.debug('Key error trying to get cookie vars: {}'.format(e))
-        vars = {}
-    return vars
+        cookie_vars = {}
+    return cookie_vars
 
 
 def get_exp_time():
@@ -115,7 +116,6 @@ def get_exp_time():
 
 
 def get_cookie_expiration_date_str():
-
     return format_7231_date(get_exp_time())
 
 
@@ -156,7 +156,7 @@ def decode_jwt_payload(jwt_payload, algo=jwt_algo):
     except jwt.ExpiredSignatureError as e:
         # Signature has expired
         log.info('JWT has expired')
-        # TODO what to do with this?
+        # TODO what more to do with this, if anything?
         return {}
     except jwt.InvalidSignatureError as e:
         log.info('JWT has failed verification. returning empty dict')
@@ -178,25 +178,12 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
     if not expdate:
         expdate = get_cookie_expiration_date_str()
-    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'), jwt_payload, expdate, cookie_domain_payloadpiece)}
+    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'),
+                                                                  jwt_payload,
+                                                                  expdate,
+                                                                  cookie_domain_payloadpiece)}
     return headers
 
-
-def make_set_cookie_headers(user_id, access_token, expdate='', cookie_domain=''):
-
-    cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
-
-    log.debug('cookie domain: {}'.format(cookie_domain_payloadpiece))
-    if not expdate:
-        expdate = get_cookie_expiration_date_str()
-
-    headers = {}
-    # Interesting worklaround: api gateway will technically only accept one of each type of header, but if you
-    # specify your set-cookies with different alpha cases, you can actually send multiple.
-    headers['Set-Cookie'] = 'urs-access-token={}; Expires={}; Path=/{}'.format(access_token, expdate, cookie_domain_payloadpiece)
-    headers['set-cookie'] = 'urs-user-id={}; Expires={}; Path=/{}'.format(user_id, expdate, cookie_domain_payloadpiece)
-    log.debug('set-cookies: {}'.format(headers))
-    return headers
 
 
 

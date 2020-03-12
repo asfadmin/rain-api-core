@@ -79,26 +79,13 @@ def get_s3_resource():
     return s3
 
 
-def write_s3(bucket, key, data):
+def read_s3(bucket: str, key: str, s3=None):
 
-    t0 = time()
-    log.debug("Writing data to s3://{1}/{0}".format(key, bucket))
-    params = {}
-    # Swift signature compatability
-    if os.getenv('S3_SIGNATURE_VERSION'):
-        params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
-    s3 = botoresource('s3', **params)
-    s3object = s3.Object(bucket, key)
-    s3object.put(Body=data)
-    log.debug('ET for writing {} to S3: {} sec'.format(key, round(time() - t0, 4)))
-    return True
-
-
-def read_s3(bucket, key):
-
+    if not s3:
+        log.warning('creating a S3 resource in read_s3() function')
+        s3 = get_s3_resource()
     t0 = time()
     log.info("Downloading config file {0} from s3://{1}...".format(key, bucket))
-    s3 = get_s3_resource()
     obj = s3.Object(bucket, key)
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
     return obj.get()['Body'].read().decode('utf-8')
