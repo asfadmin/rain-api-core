@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 secret_cache = {}
 region_list_cache = []
 region = ''
-botosess = None
+botosess = botosession.Session()
 
 
 def get_region():
@@ -42,9 +42,8 @@ def retrieve_secret(secret_name):
         return secret_cache[secret_name]
 
     region_name = os.getenv('AWS_DEFAULT_REGION')
+
     # Create a Secrets Manager client
-    if not botosess:
-        botosess = botosession.Session()
     client = botosess.client(
         service_name='secretsmanager',
         region_name=region_name
