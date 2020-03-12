@@ -7,9 +7,9 @@ from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
 from time import time
 
-from .session_util import sessttl
 from .aws_util import retrieve_secret
 
+sessttl = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 log = logging.getLogger(__name__)
 
 html_template_status = ''
