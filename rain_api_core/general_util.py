@@ -15,8 +15,6 @@ def get_log():
 
     h = logging.StreamHandler(sys.stdout)
 
-    # use whatever format you want here
-    FORMAT = '%(asctime)s %(message)s'
     h.setFormatter(logging.Formatter(log_fmt_str))
     logger.addHandler(h)
     logger.setLevel(getattr(logging, loglevel))
