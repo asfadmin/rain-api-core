@@ -6,9 +6,9 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers, make_set_cookie_headers_jwt, get_exp_time
+from .view_util import make_set_cookie_headers_jwt, get_exp_time
 from .aws_util import retrieve_secret
-from .session_util import store_session
+
 
 log = logging.getLogger(__name__)
 
@@ -105,47 +105,23 @@ def get_profile(user_id, token, temptoken=False):
     headers = {"Authorization": "Bearer " + headertoken}
     req = urllib.request.Request(url, None, headers)
 
-    t0 = time()
     try:
 
         response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
-        t1 = time()
         packet = response.read()
 
         user_profile = loads(packet)
-        t2 = time()
-        store_session(user_id, token, user_profile)
-        t3 = time()
-        log.debug('ET for get_profile() urlopen() {} sec'.format(t1 - t0))
-        log.debug('ET for get_profile() response.read() and loads() {} sec'.format(t2 - t1))
-        log.debug('ET for get_profile() store_session() {} sec'.format(t3 - t2))
 
         return user_profile
 
     except urllib.error.URLError as e:
         log.warning("Error fetching profile: {0}".format(e))
-        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
         if not temptoken: # This keeps get_new_token_and_profile() from calling this over and over
             log.debug('because error above, going to get_new_token_and_profile()')
             return get_new_token_and_profile(user_id, token)
         else:
             log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
             return {}
-
-
-def check_profile(cookies):
-    try:
-        token = cookies['urs-access-token']
-        user_id = cookies['urs-user-id']
-    except(IndexError, KeyError):
-        token = False
-        user_id = False
-
-    if token and user_id:
-        return get_profile(user_id, token)
-
-    log.warning('Did not find token ({0}) or user_id ({1})'.format(token, user_id))
-    return False
 
 
 def get_new_token_and_profile(user_id, cookietoken):
@@ -228,12 +204,12 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         return False, new_profile
 
     try:
-        jwt_payload = cookievars[os.getenv('JWT_COOKIENAME','asf-urs')]
+        jwt_payload = cookievars[os.getenv('JWT_COOKIENAME', 'asf-urs')]
 
     except (KeyError, IndexError) as e:
-        log.warning('JWT cookie not present. Falling back to "urs-user-id" and "urs-access-token"')
+        log.error('JWT cookie not present. ')
 
-        return user_in_group_urs(private_groups, cookievars['urs-user-id'], cookievars['urs-access-token'], user_profile, refresh_first)
+        return False
 
     else:
         if refresh_first:
@@ -346,7 +322,6 @@ def do_login(args, context, cookie_domain=''):
         jwt_cookie_payload = user_profile_2_jwt_payload(user_id, auth['access_token'], user_profile)
 
         headers = {'Location': redirect_to}
-        headers.update(make_set_cookie_headers(user_id, auth['access_token'], '', cookie_domain))
         headers.update(make_set_cookie_headers_jwt(jwt_cookie_payload, '', cookie_domain))
         return 301, {}, headers
 
