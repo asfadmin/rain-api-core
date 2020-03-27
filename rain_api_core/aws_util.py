@@ -8,6 +8,7 @@ from json import loads
 from time import time
 from yaml import safe_load
 from boto3 import client as botoclient, resource as botoresource, session as botosession, Session as boto_Session
+from boto3.resources.base import ServiceResource
 from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
@@ -15,6 +16,8 @@ log = logging.getLogger(__name__)
 secret_cache = {}
 region_list_cache = []
 region = ''
+botosess = botosession.Session()
+
 
 def get_region():
     """
@@ -31,6 +34,7 @@ def get_region():
 def retrieve_secret(secret_name):
 
     global secret_cache                                                               # pylint: disable=global-statement
+    global botosess                                                                   # pylint: disable=global-statement
     t0 = time()
 
     if secret_name in secret_cache:
@@ -38,9 +42,9 @@ def retrieve_secret(secret_name):
         return secret_cache[secret_name]
 
     region_name = os.getenv('AWS_DEFAULT_REGION')
+
     # Create a Secrets Manager client
-    session = botosession.Session()
-    client = session.client(
+    client = botosess.client(
         service_name='secretsmanager',
         region_name=region_name
     )
@@ -70,7 +74,10 @@ def retrieve_secret(secret_name):
 
 
 def get_s3_resource():
+    """
 
+    :return: subclass of boto3.resources.base.ServiceResource
+    """
     params = {}
     # Swift signature compatability
     if os.getenv('S3_SIGNATURE_VERSION'):
@@ -79,8 +86,18 @@ def get_s3_resource():
     return s3
 
 
-def read_s3(bucket: str, key: str, s3=None):
+def read_s3(bucket: str, key: str, s3: ServiceResource=None):
+    """
+    returns file
+    :type bucket: str
+    :param bucket:
 
+    :type key: str
+    :param key:
+    :param s3: S3 resource
+
+    :return: str
+    """
     if not s3:
         log.warning('creating a S3 resource in read_s3() function')
         s3 = get_s3_resource()
@@ -91,8 +108,13 @@ def read_s3(bucket: str, key: str, s3=None):
     return obj.get()['Body'].read().decode('utf-8')
 
 
-def get_yaml(bucket, file_name):
-
+def get_yaml(bucket: str, file_name: str, s3: ServiceResource=None):
+    """
+    Loads the YAML from a given bucket/filename
+    :param bucket: bucket name
+    :param file_name: file path/name
+    :return:
+    """
     try:
         cfg_yaml = read_s3(bucket, file_name)
         return safe_load(cfg_yaml)
@@ -101,14 +123,14 @@ def get_yaml(bucket, file_name):
         raise
 
 
-def get_yaml_file(bucket, key):
+def get_yaml_file(bucket, key, s3: ServiceResource=None):
 
     if not key:
         # No file was provided, send empty dict
         return {}
     try:
         log.info("Attempting to download yaml s3://{0}/{1}".format(bucket, key))
-        optional_file = get_yaml( bucket, key )
+        optional_file = get_yaml(bucket, key, s3)
         return optional_file
     except ClientError as e:
         # The specified file did not exist
@@ -116,7 +138,7 @@ def get_yaml_file(bucket, key):
         sys.exit()
 
 
-def get_role_creds(user_id:str='', in_region:bool=False):
+def get_role_creds(user_id: str='', in_region: bool=False):
     """
     :param user_id: string with URS username
     :param in_region: boolean If True a download role that works only in region will be returned
@@ -171,7 +193,7 @@ def get_region_cidr_ranges():
     return region_list_cache
 
 
-def check_in_region_request(ip_addr:str):
+def check_in_region_request(ip_addr: str):
     """
     :param ip_addr: string with ip address to be checked for in-regionness
     :return: boolean True if ip_addr is in_region, False otherwise

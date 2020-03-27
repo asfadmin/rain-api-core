@@ -14,10 +14,9 @@ def prepend_bucketname(name):
     return "{}{}".format(prefix, name)
 
 
+def hmacsha256(key, string):
 
-def hmacsha256 (key, string):
-
-    return hmac.new( key, string.encode('utf-8'), sha256 )
+    return hmac.new(key, string.encode('utf-8'), sha256)
 
 
 def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET'):
@@ -113,7 +112,7 @@ def process_varargs(varargs, b_map):
 
     varargs = varargs.split("/")
 
-    # Make sure we got atleast 1 path, and 1 file name:
+    # Make sure we got at least 1 path, and 1 file name:
     if len(varargs) < 2:
         return "/".join(varargs), None, None
 
@@ -131,6 +130,7 @@ def process_varargs(varargs, b_map):
         path = "/".join(varargs)
 
     return path, bucket, object_name
+
 
 def check_private_bucket(bucket, private_buckets, b_map):
 
