@@ -9,22 +9,25 @@ from time import time
 
 from .aws_util import retrieve_secret
 
-sessttl = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
+
 log = logging.getLogger(__name__)
 
-html_template_status = ''
-html_template_local_cachedir = '/tmp/templates/'                         #nosec We want to leverage instance persistance
+HTML_TEMPLATE_STATUS = ''
+HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'                         #nosec We want to leverage instance persistance
 
-jwt_algo = os.getenv('JWT_ALGO', 'RS256')
-jwt_keys = {}
-JWT_COOKIE_DEFAULT_NAME = 'asf-urs'
+SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
+
+JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
+JWT_KEYS = {}
+JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
+
 
 def get_jwt_keys():
-    global jwt_keys
+    global JWT_KEYS
 
-    if jwt_keys:
+    if JWT_KEYS:
         # Cached
-        return jwt_keys
+        return JWT_KEYS
     raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
 
     return_dict = {}
@@ -32,16 +35,16 @@ def get_jwt_keys():
     for k in raw_keys:
         return_dict[k] = base64.b64decode(raw_keys[k].encode('utf-8'))
 
-    jwt_keys = return_dict  # Cache it
+    JWT_KEYS = return_dict  # Cache it
     return return_dict
 
 
 def cache_html_templates():
     try:
-        os.mkdir(html_template_local_cachedir, 0o700)
+        os.mkdir(HTML_TEMPLATE_LOCAL_CACHEDIR, 0o700)
     except FileExistsError:
         # good.
-        log.debug('somehow, {} exists already'.format(html_template_local_cachedir))
+        log.debug('somehow, {} exists already'.format(HTML_TEMPLATE_LOCAL_CACHEDIR))
 
     if os.getenv('HTML_TEMPLATE_DIR', '') == '':
         return 'DEFAULT'
@@ -58,8 +61,8 @@ def cache_html_templates():
         for o in result.get('Contents'):
             filename = os.path.basename(o['Key'])
             if filename:
-                log.debug('attempting to save {}'.format(os.path.join(html_template_local_cachedir, filename)))
-                client.download_file(bucket, o['Key'], os.path.join(html_template_local_cachedir, filename))
+                log.debug('attempting to save {}'.format(os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename)))
+                client.download_file(bucket, o['Key'], os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename))
         return 'CACHED'
     except (TypeError, KeyError) as e:
         log.error(e)
@@ -69,13 +72,13 @@ def cache_html_templates():
 
 def get_html_body(template_vars: dict, templatefile: str='root.html'):
 
-    global html_template_status                                                       # pylint: disable=global-statement
+    global HTML_TEMPLATE_STATUS                                                       # pylint: disable=global-statement
 
-    if html_template_status == '':
-        html_template_status = cache_html_templates()
+    if HTML_TEMPLATE_STATUS == '':
+        HTML_TEMPLATE_STATUS = cache_html_templates()
 
     jin_env = Environment(
-        loader=FileSystemLoader([html_template_local_cachedir, os.path.join(os.path.dirname(__file__), '../', "templates")]),
+        loader=FileSystemLoader([HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
         autoescape=select_autoescape(['html', 'xml'])
     )
     try:
@@ -99,9 +102,9 @@ def get_cookie_vars(headers: dict):
     log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
-        if os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME) in cooks:
-            decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME)])
-            cookie_vars.update({os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME): decoded_payload})
+        if JWT_COOKIE_NAME in cooks:
+            decoded_payload = JWT_COOKIE_NAME
+            cookie_vars.update({JWT_COOKIE_NAME: decoded_payload})
         else:
             log.debug('could not find jwt cookie in get_cookie_vars()')
             cookie_vars = {}
@@ -112,7 +115,7 @@ def get_cookie_vars(headers: dict):
 
 
 def get_exp_time():
-    return int(time() + sessttl)
+    return int(time() + SESSTTL)
 
 
 def get_cookie_expiration_date_str():
@@ -133,7 +136,7 @@ def get_cookies(hdrs):
     return cookies
 
 
-def make_jwt_payload(payload, algo=jwt_algo):
+def make_jwt_payload(payload, algo=JWT_ALGO):
 
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
@@ -149,7 +152,7 @@ def make_jwt_payload(payload, algo=jwt_algo):
         return ''
 
 
-def decode_jwt_payload(jwt_payload, algo=jwt_algo):
+def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     log.debug('pub key: "{}"'.format(get_jwt_keys()['rsa_pub_key']))
     try:
         cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
@@ -178,7 +181,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
     if not expdate:
         expdate = get_cookie_expiration_date_str()
-    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'),
+    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(JWT_COOKIE_NAME,
                                                                   jwt_payload,
                                                                   expdate,
                                                                   cookie_domain_payloadpiece)}

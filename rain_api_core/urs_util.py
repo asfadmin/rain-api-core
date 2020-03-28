@@ -6,7 +6,7 @@ import urllib
 from time import time
 from json import loads
 
-from .view_util import make_set_cookie_headers_jwt, get_exp_time
+from .view_util import make_set_cookie_headers_jwt, get_exp_time, JWT_COOKIE_NAME
 from .aws_util import retrieve_secret
 
 
@@ -204,7 +204,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         return False, new_profile
 
     try:
-        jwt_payload = cookievars[os.getenv('JWT_COOKIENAME', 'asf-urs')]
+        jwt_payload = cookievars[JWT_COOKIE_NAME]
 
     except (KeyError, IndexError) as e:
         log.error('JWT cookie not present. ')
