@@ -15,16 +15,17 @@ log = logging.getLogger(__name__)
 html_template_status = ''
 html_template_local_cachedir = '/tmp/templates/'                         #nosec We want to leverage instance persistance
 
-jwt_algo = os.getenv('JWT_ALGO', 'RS256')
-jwt_keys = {}
-JWT_COOKIE_DEFAULT_NAME = 'asf-urs'
+JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
+JWT_KEYS = {}
+JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
+
 
 def get_jwt_keys():
-    global jwt_keys
+    global JWT_KEYS
 
-    if jwt_keys:
+    if JWT_KEYS:
         # Cached
-        return jwt_keys
+        return JWT_KEYS
     raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
 
     return_dict = {}
@@ -32,7 +33,7 @@ def get_jwt_keys():
     for k in raw_keys:
         return_dict[k] = base64.b64decode(raw_keys[k].encode('utf-8'))
 
-    jwt_keys = return_dict  # Cache it
+    JWT_KEYS = return_dict  # Cache it
     return return_dict
 
 
@@ -99,9 +100,9 @@ def get_cookie_vars(headers: dict):
     log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
-        if os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME) in cooks:
-            decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME)])
-            cookie_vars.update({os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME): decoded_payload})
+        if JWT_COOKIE_NAME in cooks:
+            decoded_payload = JWT_COOKIE_NAME
+            cookie_vars.update({JWT_COOKIE_NAME: decoded_payload})
         else:
             log.debug('could not find jwt cookie in get_cookie_vars()')
             cookie_vars = {}
@@ -133,7 +134,7 @@ def get_cookies(hdrs):
     return cookies
 
 
-def make_jwt_payload(payload, algo=jwt_algo):
+def make_jwt_payload(payload, algo=JWT_ALGO):
 
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
@@ -149,7 +150,7 @@ def make_jwt_payload(payload, algo=jwt_algo):
         return ''
 
 
-def decode_jwt_payload(jwt_payload, algo=jwt_algo):
+def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     log.debug('pub key: "{}"'.format(get_jwt_keys()['rsa_pub_key']))
     try:
         cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
@@ -178,7 +179,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
     if not expdate:
         expdate = get_cookie_expiration_date_str()
-    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(os.getenv('JWT_COOKIENAME','asf-urs'),
+    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(JWT_COOKIE_NAME,
                                                                   jwt_payload,
                                                                   expdate,
                                                                   cookie_domain_payloadpiece)}
