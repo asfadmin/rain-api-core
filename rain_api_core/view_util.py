@@ -17,7 +17,7 @@ html_template_local_cachedir = '/tmp/templates/'                         #nosec 
 
 jwt_algo = os.getenv('JWT_ALGO', 'RS256')
 jwt_keys = {}
-
+JWT_COOKIE_DEFAULT_NAME = 'asf-urs'
 
 def get_jwt_keys():
     global jwt_keys
@@ -99,9 +99,9 @@ def get_cookie_vars(headers: dict):
     log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
-        if os.getenv('JWT_COOKIENAME','asf-urs') in cooks:
-            decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME','asf-urs')])
-            cookie_vars.update({os.getenv('JWT_COOKIENAME','asf-urs'): decoded_payload})
+        if os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME) in cooks:
+            decoded_payload = decode_jwt_payload(cooks[os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME)])
+            cookie_vars.update({os.getenv('JWT_COOKIENAME', JWT_COOKIE_DEFAULT_NAME): decoded_payload})
         else:
             log.debug('could not find jwt cookie in get_cookie_vars()')
             cookie_vars = {}
