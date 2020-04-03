@@ -76,15 +76,13 @@ def get_urs_url(ctxt, to=False):
         urs_url += "&state={0}".format(to)
 
     # Try to handle scripts
-    agent_pattern = re.compile('^(curl|wget|aria2|python)', re.IGNORECASE)
-
     try:
         download_agent = ctxt['identity']['userAgent']
     except IndexError:
         log.debug("No User Agent!")
         return urs_url
 
-    if agent_pattern.match(download_agent):
+    if not download_agent.startswith('Mozilla'):
         urs_url += "&app_type=401"
 
     return urs_url
