@@ -108,10 +108,10 @@ def get_bucket_dynamic_path(path_list, b_map):
         else:
             log.warning("Could not find {0} in bucketmap".format(path_part))
             log.debug('said bucketmap: {}'.format(map_dict))
-            return False, False, False, False
+            return False, False, False, []
 
     # what? No path?
-    return False, False, False, False
+    return False, False, False, []
 
 
 def process_varargs(varargs: list, b_map: dict):
@@ -132,7 +132,7 @@ def process_request(varargs, b_map):
 
     # Make sure we got at least 1 path, and 1 file name:
     if len(varargs) < 2:
-        return "/".join(varargs), None, None
+        return "/".join(varargs), None, None, []
 
     # Watch for ASF-ish reverse URL mapping formats:
     if len(varargs) == 3:
