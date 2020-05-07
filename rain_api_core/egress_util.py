@@ -77,7 +77,6 @@ def get_bucket_dynamic_path(path_list, b_map):
     log.debug("Pathparts is {0}".format(", ".join(path_list)))
     # walk the bucket map to see if this path is valid
     for path_part in path_list:
-        log.debug(f'path_part: {path_part}, mapping: {mapping}, map_dict: {map_dict}')
         # Check if we hit a leaf of the YAML tree
         if (mapping and (isinstance(map_dict, str)) or 'bucket' in map_dict):
             customheaders = []
@@ -92,7 +91,7 @@ def get_bucket_dynamic_path(path_list, b_map):
             # Pop mapping off path_list
             for _ in mapping:
                 path_list.pop(0)
-            log.debug(f'mapping, again: {mapping}')
+
             # Join the remaining bits together to form object_name
             object_name = "/".join(path_list)
             bucket_path = "/".join(mapping)
