@@ -103,7 +103,7 @@ def get_cookie_vars(headers: dict):
     cookie_vars = {}
     try:
         if JWT_COOKIE_NAME in cooks:
-            decoded_payload = JWT_COOKIE_NAME
+            decoded_payload = decode_jwt_payload(cooks[JWT_COOKIE_NAME], JWT_ALGO)
             cookie_vars.update({JWT_COOKIE_NAME: decoded_payload})
         else:
             log.debug('could not find jwt cookie in get_cookie_vars()')

@@ -64,57 +64,74 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     url = "https://" + hostname + "/" + object_name + "?" + can_query_string + "&X-Amz-Signature=" + Signature
     return url
 
-
 def get_bucket_dynamic_path(path_list, b_map):
 
     # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
     if 'MAP' in b_map:
-        derived = b_map['MAP']
+        map_dict = b_map['MAP']
     else:
-        derived = b_map
+        map_dict = b_map
 
     mapping = []
 
     log.debug("Pathparts is {0}".format(", ".join(path_list)))
-
     # walk the bucket map to see if this path is valid
     for path_part in path_list:
-
         # Check if we hit a leaf of the YAML tree
-        if mapping and isinstance(derived, str):
+        if (mapping and (isinstance(map_dict, str)) or 'bucket' in map_dict):
+            customheaders = []
+            if 'bucket' in map_dict:
+                bucketname = map_dict['bucket']
+                if 'headers' in map_dict:
+                    customheaders = map_dict['headers']
+            else:
+                bucketname = map_dict
 
+            log.debug(f'mapping: {mapping}')
             # Pop mapping off path_list
             for _ in mapping:
-               path_list.pop(0)
+                path_list.pop(0)
 
             # Join the remaining bits together to form object_name
             object_name = "/".join(path_list)
             bucket_path = "/".join(mapping)
 
             log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
-            return prepend_bucketname(derived), bucket_path, object_name
+            return prepend_bucketname(bucketname), bucket_path, object_name, customheaders
 
-        if path_part in derived:
-            derived = derived[path_part]
+        if path_part in map_dict:
+            map_dict = map_dict[path_part]
             mapping.append(path_part)
             log.debug("Found {0}, Mapping is now {1}".format(path_part, "/".join(mapping)))
 
         else:
             log.warning("Could not find {0} in bucketmap".format(path_part))
-            log.debug('said bucketmap: {}'.format(derived))
-            return False, False, False
+            log.debug('said bucketmap: {}'.format(map_dict))
+            return False, False, False, []
 
     # what? No path?
-    return False, False, False
+    return False, False, False, []
 
 
-def process_varargs(varargs, b_map):
+def process_varargs(varargs: list, b_map: dict):
+    """
+    wrapper around process_request that returns legacy values to preserve backward compatibility
+    :param varargs: a list with the path to the file requested.
+    :param b_map: bucket map
+    :return: path, bucket, object_name
+    """
+    log.warning('Deprecated process_varargs() called.')
+    path, bucket, object_name, headers = process_request(varargs, b_map)
+    return path, bucket, object_name
+
+
+def process_request(varargs, b_map):
 
     varargs = varargs.split("/")
 
     # Make sure we got at least 1 path, and 1 file name:
     if len(varargs) < 2:
-        return "/".join(varargs), None, None
+        return "/".join(varargs), None, None, []
 
     # Watch for ASF-ish reverse URL mapping formats:
     if len(varargs) == 3:
@@ -122,14 +139,14 @@ def process_varargs(varargs, b_map):
             varargs[0], varargs[1] = varargs[1], varargs[0]
 
     # Look up the bucket from path parts
-    bucket, path, object_name  = get_bucket_dynamic_path(varargs, b_map)
+    bucket, path, object_name, headers = get_bucket_dynamic_path(varargs, b_map)
 
     # If we didn't figure out the bucket, we don't know the path/object_name
     if not bucket:
         object_name = varargs.pop(-1)
         path = "/".join(varargs)
 
-    return path, bucket, object_name
+    return path, bucket, object_name, headers
 
 
 def check_private_bucket(bucket, private_buckets, b_map):
