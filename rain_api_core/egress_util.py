@@ -64,6 +64,7 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     url = "https://" + hostname + "/" + object_name + "?" + can_query_string + "&X-Amz-Signature=" + Signature
     return url
 
+
 def get_bucket_dynamic_path(path_list, b_map):
 
     # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
@@ -79,7 +80,7 @@ def get_bucket_dynamic_path(path_list, b_map):
     for path_part in path_list:
         # Check if we hit a leaf of the YAML tree
         if (mapping and (isinstance(map_dict, str)) or 'bucket' in map_dict):
-            customheaders = []
+            customheaders = {}
             if 'bucket' in map_dict:
                 bucketname = map_dict['bucket']
                 if 'headers' in map_dict:
@@ -107,10 +108,10 @@ def get_bucket_dynamic_path(path_list, b_map):
         else:
             log.warning("Could not find {0} in bucketmap".format(path_part))
             log.debug('said bucketmap: {}'.format(map_dict))
-            return False, False, False, []
+            return False, False, False, {}
 
     # what? No path?
-    return False, False, False, []
+    return False, False, False, {}
 
 
 def process_varargs(varargs: list, b_map: dict):
