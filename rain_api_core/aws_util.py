@@ -82,6 +82,7 @@ def get_s3_resource():
 
     :return: subclass of boto3.resources.base.ServiceResource
     """
+    global s3_resource
     if not s3_resource:
         params = {}
         # Swift signature compatability
