@@ -13,9 +13,11 @@ from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
+sts = botoclient('sts')
 secret_cache = {}
 session_cache = {}
 region_list_cache = []
+s3_resource = None
 region = ''
 botosess = botosession.Session()
 role_creds_cache = {os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN'): {}, os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN'): {}}
@@ -27,8 +29,9 @@ def get_region():
     :type: string
     """
     global region                                                                      #pylint: disable=global-statement
+    global botosess                                                                    #pylint: disable=global-statement
     if not region:
-        region = botosession.Session().region_name
+        region = botosess.region_name
     return region
 
 
@@ -79,12 +82,14 @@ def get_s3_resource():
 
     :return: subclass of boto3.resources.base.ServiceResource
     """
-    params = {}
-    # Swift signature compatability
-    if os.getenv('S3_SIGNATURE_VERSION'):
-        params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
-    s3 = botoresource('s3', **params)
-    return s3
+    global s3_resource                                                                    #pylint: disable=global-statement
+    if not s3_resource:
+        params = {}
+        # Swift signature compatability
+        if os.getenv('S3_SIGNATURE_VERSION'):
+            params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
+        s3_resource = botoresource('s3', **params)
+    return s3_resource
 
 
 def read_s3(bucket: str, key: str, s3: ServiceResource=None):
@@ -145,7 +150,7 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     :param in_region: boolean If True a download role that works only in region will be returned
     :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
     """
-    sts = botoclient('sts')
+    global sts                                                                    #pylint: disable=global-statement
     if not user_id:
         user_id = 'unauthenticated'
 
@@ -164,7 +169,8 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
 
 def get_role_session(creds=None, user_id=None):
-
+    
+    global session_cache                                                                    #pylint: disable=global-statement
     sts_resp = creds if creds else get_role_creds(user_id)
     log.debug('sts_resp: {}'.format(sts_resp))
     
