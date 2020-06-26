@@ -17,7 +17,7 @@ secret_cache = {}
 region_list_cache = []
 region = ''
 botosess = botosession.Session()
-role_creds_cache = {}
+role_creds_cache = {os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN'): {}, os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN'): {}}
 
 def get_region():
     """
@@ -148,16 +148,16 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     if not user_id:
         user_id = 'unauthenticated'
 
-    if user_id not in role_creds_cache:
-        if in_region:
-            download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN')
-        else:
-            download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
+    if in_region:
+        download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN')
+    else:
+        download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
 
-        log.debug('assuming role: {}, role session username: {}'.format(download_role_arn, user_id))
-        role_creds_cache[user_id] = sts.assume_role(RoleArn=download_role_arn, RoleSessionName=user_id)
+    if user_id not in role_creds_cache[download_role_arn]:
+        role_creds_cache[download_role_arn][user_id] = sts.assume_role(RoleArn=download_role_arn, RoleSessionName=user_id)
 
-    return role_creds_cache[user_id]
+    log.debug(f'assuming role: {download_role_arn}, role session username: {user_id}')
+    return role_creds_cache[download_role_arn][user_id]
 
 
 def get_role_session(creds=None, user_id=None):
