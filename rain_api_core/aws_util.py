@@ -29,7 +29,7 @@ def get_region():
     :type: string
     """
     global region                                                                      #pylint: disable=global-statement
-    global botosess
+    global botosess                                                                    #pylint: disable=global-statement
     if not region:
         region = botosess.region_name
     return region
@@ -82,7 +82,7 @@ def get_s3_resource():
 
     :return: subclass of boto3.resources.base.ServiceResource
     """
-    global s3_resource
+    global s3_resource                                                                    #pylint: disable=global-statement
     if not s3_resource:
         params = {}
         # Swift signature compatability
@@ -150,7 +150,7 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     :param in_region: boolean If True a download role that works only in region will be returned
     :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
     """
-    global sts
+    global sts                                                                    #pylint: disable=global-statement
     if not user_id:
         user_id = 'unauthenticated'
 
@@ -170,7 +170,7 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
 def get_role_session(creds=None, user_id=None):
     
-    global session_cache
+    global session_cache                                                                    #pylint: disable=global-statement
     sts_resp = creds if creds else get_role_creds(user_id)
     log.debug('sts_resp: {}'.format(sts_resp))
     
