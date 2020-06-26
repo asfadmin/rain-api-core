@@ -1,6 +1,6 @@
 jinja2==2.11.2
 PyYAML==5.3.1
-aws-requests-auth==0.4.2
+aws-requests-auth==0.4.3
 chalice==1.15.1
 netaddr==0.7.20
 cryptography==2.9.2
