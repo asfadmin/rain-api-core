@@ -29,8 +29,9 @@ def get_region():
     :type: string
     """
     global region                                                                      #pylint: disable=global-statement
+    global botosess
     if not region:
-        region = botosession.Session().region_name
+        region = botosess.region_name
     return region
 
 
@@ -148,6 +149,7 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     :param in_region: boolean If True a download role that works only in region will be returned
     :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
     """
+    global sts
     if not user_id:
         user_id = 'unauthenticated'
 
@@ -166,7 +168,8 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
 
 def get_role_session(creds=None, user_id=None):
-
+    
+    global session_cache
     sts_resp = creds if creds else get_role_creds(user_id)
     log.debug('sts_resp: {}'.format(sts_resp))
     
