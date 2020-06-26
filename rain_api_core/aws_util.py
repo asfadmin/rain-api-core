@@ -14,6 +14,7 @@ from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
 secret_cache = {}
+session_cache = []
 region_list_cache = []
 region = ''
 botosess = botosession.Session()
@@ -155,6 +156,8 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
     if user_id not in role_creds_cache[download_role_arn]:
         role_creds_cache[download_role_arn][user_id] = sts.assume_role(RoleArn=download_role_arn, RoleSessionName=user_id)
+    else:
+        log.info("Reusing role credentials for {0}".format(user_id))
 
     log.debug(f'assuming role: {download_role_arn}, role session username: {user_id}')
     return role_creds_cache[download_role_arn][user_id]
@@ -164,12 +167,16 @@ def get_role_session(creds=None, user_id=None):
 
     sts_resp = creds if creds else get_role_creds(user_id)
     log.debug('sts_resp: {}'.format(sts_resp))
-    session = boto_Session(
-        aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
-        aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
-        aws_session_token=sts_resp['Credentials']['SessionToken'])
-
-    return session
+    
+    session_id = sts_resp['AssumedRoleUser']['AssumedRoleId']
+    if session_id not in session_cache:
+        session_cache[session_id] = boto_Session(
+                                        aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
+                                        aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
+                                        aws_session_token=sts_resp['Credentials']['SessionToken'])
+    else:
+        log.info("Reusing session {0}".format(session_id))
+    return session_cache[session_id]
 
 
 def get_region_cidr_ranges():
