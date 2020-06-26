@@ -13,6 +13,7 @@ from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
+sts = botoclient('sts')
 secret_cache = {}
 session_cache = {}
 region_list_cache = []
@@ -145,7 +146,6 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     :param in_region: boolean If True a download role that works only in region will be returned
     :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
     """
-    sts = botoclient('sts')
     if not user_id:
         user_id = 'unauthenticated'
 
