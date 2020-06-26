@@ -17,6 +17,7 @@ sts = botoclient('sts')
 secret_cache = {}
 session_cache = {}
 region_list_cache = []
+s3_resource = None
 region = ''
 botosess = botosession.Session()
 role_creds_cache = {os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN'): {}, os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN'): {}}
@@ -80,12 +81,13 @@ def get_s3_resource():
 
     :return: subclass of boto3.resources.base.ServiceResource
     """
-    params = {}
-    # Swift signature compatability
-    if os.getenv('S3_SIGNATURE_VERSION'):
-        params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
-    s3 = botoresource('s3', **params)
-    return s3
+    if not s3_resource:
+        params = {}
+        # Swift signature compatability
+        if os.getenv('S3_SIGNATURE_VERSION'):
+            params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
+        s3_resource = botoresource('s3', **params)
+    return s3_resource
 
 
 def read_s3(bucket: str, key: str, s3: ServiceResource=None):
