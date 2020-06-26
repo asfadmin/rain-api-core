@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
 secret_cache = {}
-session_cache = []
+session_cache = {}
 region_list_cache = []
 region = ''
 botosess = botosession.Session()
