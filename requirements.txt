@@ -1,7 +1,7 @@
 jinja2==2.11.2
 PyYAML==5.3.1
 aws-requests-auth==0.4.3
-chalice==1.15.1
+chalice==1.16.0
 netaddr==0.7.20
 cryptography==2.9.2
 pyjwt==1.7.1
