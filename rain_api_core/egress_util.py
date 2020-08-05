@@ -150,16 +150,9 @@ def process_request(varargs, b_map):
     return path, bucket, object_name, headers
 
 
-def check_private_bucket(bucket, private_buckets, b_map):
+def check_private_bucket(bucket, b_map):
 
-    log.debug('check_private_buckets(): bucket: {}, private_buckets: {}'.format(bucket, private_buckets))
-
-    # Check public bucket file:
-    if private_buckets and 'PRIVATE_BUCKETS' in private_buckets:
-        for priv_bucket in private_buckets['PRIVATE_BUCKETS']:
-            if bucket == prepend_bucketname(priv_bucket):
-                # This bucket is PRIVATE, return group!
-                return private_buckets['PRIVATE_BUCKETS'][priv_bucket]
+    log.debug('check_private_buckets(): bucket: {}'.format(bucket))
 
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
@@ -171,16 +164,7 @@ def check_private_bucket(bucket, private_buckets, b_map):
     return False
 
 
-def check_public_bucket(bucket, public_buckets, b_map):
-    # Check public bucket file:
-    if 'PUBLIC_BUCKETS' in public_buckets:
-        log.debug('we have a PUBLIC_BUCKETS in the public buckets file')
-        for pub_bucket in public_buckets['PUBLIC_BUCKETS']:
-            #log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
-            if bucket == prepend_bucketname(pub_bucket):
-                # This bucket is public!
-                log.debug('found a public, we\'ll take it')
-                return True
+def check_public_bucket(bucket, b_map):
 
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
