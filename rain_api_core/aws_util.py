@@ -159,18 +159,18 @@ def get_role_creds(user_id: str='', in_region: bool=False):
     else:
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
         
-    # We need the MAX session to duration for long-lived Pre-signed URLS
-    session_params = {"RoleArn": download_role_arn, "RoleSessionName": user_id, "DurationSeconds": 12*3600 }
+    # chained role assumption like this CANNOT currently be extended past 1 Hour.
+    # https://aws.amazon.com/premiumsupport/knowledge-center/iam-role-chaining-limit/
+    session_params = {"RoleArn": download_role_arn, "RoleSessionName": user_id, "DurationSeconds": 3600 }
     now = time.time()
     session_offset = 0 
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
-    elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 1800:
-        # If the session has been active for more than 30 minutes, grab a new one. Its valid for another
-        # 11.5 hours, but the longer its active, the less time a presigned-url would stay active.
-        log.info("Replacing 30 minute old session for {0}".format(user_id))
+    elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
+        # If the session has been active for more than 10 minutes, grab a new one.
+        log.info("Replacing 10 minute old session for {0}".format(user_id))
         fresh_session = sts.assume_role(**session_params)
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     else:
