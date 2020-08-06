@@ -142,13 +142,13 @@ def get_yaml_file(bucket, key, s3: ServiceResource=None):
         # The specified file did not exist
         log.error("Could not download yaml @ s3://{0}/{1}: {2}".format(bucket, key, e))
         sys.exit()
-
-
+    
 def get_role_creds(user_id: str='', in_region: bool=False):
     """
     :param user_id: string with URS username
     :param in_region: boolean If True a download role that works only in region will be returned
     :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
+    :return: Offset, in seconds for how long the STS session has been active
     """
     global sts                                                                    #pylint: disable=global-statement
     if not user_id:
@@ -158,20 +158,33 @@ def get_role_creds(user_id: str='', in_region: bool=False):
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN')
     else:
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
+        
+    # We need the MAX session to duration for long-lived Pre-signed URLS
+    session_params = {"RoleArn": download_role_arn, "RoleSessionName": user_id, "DurationSeconds": 12*3600 }
+    now = time.time()
+    session_offset = 0 
 
     if user_id not in role_creds_cache[download_role_arn]:
-        role_creds_cache[download_role_arn][user_id] = sts.assume_role(RoleArn=download_role_arn, RoleSessionName=user_id)
+        fresh_session = sts.assume_role(**session_params)
+        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
+    elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 1800:
+        # If the session has been active for more than 30 minutes, grab a new one. Its valid for another
+        # 11.5 hours, but the longer its active, the less time a presigned-url would stay active.
+        log.info("Replacing 30 minute old session for {0}".format(user_id))
+        fresh_session = sts.assume_role(**session_params)
+        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     else:
         log.info("Reusing role credentials for {0}".format(user_id))
+        session_offset = round( now - role_creds_cache[download_role_arn][user_id]["timestamp"] )
 
     log.debug(f'assuming role: {download_role_arn}, role session username: {user_id}')
-    return role_creds_cache[download_role_arn][user_id]
+    return role_creds_cache[download_role_arn][user_id]["session"], session_offset
 
 
 def get_role_session(creds=None, user_id=None):
     
     global session_cache                                                                    #pylint: disable=global-statement
-    sts_resp = creds if creds else get_role_creds(user_id)
+    sts_resp = creds if creds else get_role_creds(user_id)[0]
     log.debug('sts_resp: {}'.format(sts_resp))
     
     session_id = sts_resp['AssumedRoleUser']['AssumedRoleId']
