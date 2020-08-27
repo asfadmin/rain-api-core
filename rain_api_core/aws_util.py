@@ -161,8 +161,8 @@ def get_role_creds(user_id: str='', in_region: bool=False):
         
     # chained role assumption like this CANNOT currently be extended past 1 Hour.
     # https://aws.amazon.com/premiumsupport/knowledge-center/iam-role-chaining-limit/
-    session_params = {"RoleArn": download_role_arn, "RoleSessionName": user_id, "DurationSeconds": 3600 }
     now = time()
+    session_params = {"RoleArn": download_role_arn, "RoleSessionName": f"{user_id}@{round(now)}", "DurationSeconds": 3600 }
     session_offset = 0 
 
     if user_id not in role_creds_cache[download_role_arn]:
