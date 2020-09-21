@@ -38,7 +38,7 @@ def do_auth(code, redirect_url):
                  "code": code,
                  "redirect_uri": redirect_url}
 
-    headers = {"Authorization": "BASIC " + auth}
+    headers = {"Authorization": "Basic " + auth}
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
@@ -130,7 +130,7 @@ def get_new_token_and_profile(user_id, cookietoken):
     # App U:P from URS Application
     auth = get_urs_creds()['UrsAuth']
     post_data = {"grant_type": "client_credentials" }
-    headers = {"Authorization": "BASIC " + auth}
+    headers = {"Authorization": "Basic " + auth}
 
     # Download token
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
