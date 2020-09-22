@@ -38,7 +38,7 @@ def do_auth(code, redirect_url):
                  "code": code,
                  "redirect_uri": redirect_url}
 
-    headers = {"Authorization": "BASIC " + auth}
+    headers = {"Authorization": "Basic " + auth}
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
@@ -130,7 +130,7 @@ def get_new_token_and_profile(user_id, cookietoken):
     # App U:P from URS Application
     auth = get_urs_creds()['UrsAuth']
     post_data = {"grant_type": "client_credentials" }
-    headers = {"Authorization": "BASIC " + auth}
+    headers = {"Authorization": "Basic " + auth}
 
     # Download token
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
@@ -274,14 +274,14 @@ def do_login(args, context, cookie_domain=''):
 
     if args.get('error', False):
         contentstring = 'An error occurred while trying to log into URS. URS says: "{}". '.format(args.get('error', ''))
+        template_vars = {'contentstring': contentstring, 'title': 'Could Not Login'}
         if args.get('error') == 'access_denied':
             # This happens when user doesn't agree to EULA. Maybe other times too.
             return_status = 401
-            contentstring += 'Be sure to agree to the EULA.'
+            template_vars['contentstring'] = 'Be sure to agree to the EULA.'
+            template_vars['error_code'] = 'EULA_failure'
         else:
             return_status = 400
-
-        template_vars = {'contentstring': contentstring, 'title': 'Could Not Login'}
 
         return return_status, template_vars, {}
 
