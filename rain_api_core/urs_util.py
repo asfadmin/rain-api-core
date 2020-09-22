@@ -274,14 +274,14 @@ def do_login(args, context, cookie_domain=''):
 
     if args.get('error', False):
         contentstring = 'An error occurred while trying to log into URS. URS says: "{}". '.format(args.get('error', ''))
+        template_vars = {'contentstring': contentstring, 'title': 'Could Not Login'}
         if args.get('error') == 'access_denied':
             # This happens when user doesn't agree to EULA. Maybe other times too.
             return_status = 401
-            contentstring += 'Be sure to agree to the EULA.'
+            template_vars['contentstring'] = 'Be sure to agree to the EULA.'
+            template_vars['error_code'] = 'EULA_failure'
         else:
             return_status = 400
-
-        template_vars = {'contentstring': contentstring, 'title': 'Could Not Login'}
 
         return return_status, template_vars, {}
 
