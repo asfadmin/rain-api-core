@@ -207,7 +207,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
     except (KeyError, IndexError) as e:
         log.error('JWT cookie not present. ')
 
-        return False
+        return False, new_profile
 
     else:
         if refresh_first:
