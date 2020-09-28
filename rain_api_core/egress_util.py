@@ -79,9 +79,9 @@ def get_bucket_dynamic_path(path_list, b_map):
     # walk the bucket map to see if this path is valid
     for path_part in path_list:
         # Check if we hit a leaf of the YAML tree
-        if (mapping and (isinstance(map_dict, str)) or 'bucket' in map_dict):
+        if (mapping and isinstance(map_dict, str)) or 'bucket' in map_dict: #
             customheaders = {}
-            if 'bucket' in map_dict:
+            if isinstance(map_dict, dict) and 'bucket' in map_dict:
                 bucketname = map_dict['bucket']
                 if 'headers' in map_dict:
                     customheaders = map_dict['headers']
