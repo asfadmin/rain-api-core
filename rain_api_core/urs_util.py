@@ -212,7 +212,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
     else:
         if refresh_first:
             new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])
-            jwt_payload['user_groups'] = new_profile['user_groups']
+            jwt_payload['urs-groups'] = new_profile['user_groups']
             # TODO: reset fresh group-membership JWT cookie now? Somehow?
 
         in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
@@ -221,7 +221,7 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
         elif not in_group and not refresh_first:
             # TODO: look at ['iat'] and if cookie is recent enough (how recent?), don't bother doing this.
             # one last ditch effort to see if they were so very recently added to group:
-            jwt_payload['user_groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
+            jwt_payload['urs-groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
             return user_in_group(private_groups, cookievars, {}, refresh_first=True)
         else:
             return False, new_profile
