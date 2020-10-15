@@ -32,16 +32,20 @@ def log_context (**context ):
         
 def get_log():
 
-    loglevel = os.getenv('LOGLEVEL', 'INFO')
-    log_fmt_str = '{"level": "%(levelname)s",  ' + \
-                  '"requestId": "%(request_id)s", ' + \
-                  '"message": "%(message)s", ' + \
-                  '"maturity": "%(maturity)s", ' + \
-                  '"user_id": "%(user_id)s", ' + \
-                  '"route": "%(route)s", ' + \
-                  '"build": "%(build_vers)s", ' + \
-                  '"filename": "%(filename)s", ' + \
-                  '"lineno": %(lineno)d } '
+    if os.getenv('FLATLOG', False):
+        log_fmt_str = "%(levelname)s: %(message)s (%(filename)s line " + \
+                      "%(lineno)d/%(build_vers)s/%(maturity)s) - " + \
+                      "requestId: %(request_id)s; user_id: %(user_id)s; route: %(route)s" 
+    else:              
+        log_fmt_str = '{"level": "%(levelname)s",  ' + \
+                      '"requestId": "%(request_id)s", ' + \
+                      '"message": "%(message)s", ' + \
+                      '"maturity": "%(maturity)s", ' + \
+                      '"user_id": "%(user_id)s", ' + \
+                      '"route": "%(route)s", ' + \
+                      '"build": "%(build_vers)s", ' + \
+                      '"filename": "%(filename)s", ' + \
+                      '"lineno": %(lineno)d } '
 
     logger = logging.getLogger()
     
