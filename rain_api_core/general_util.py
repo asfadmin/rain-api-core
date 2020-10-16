@@ -20,23 +20,24 @@ class CustomLogFilter(logging.Filter):
         record.user_id = self.params['user_id']
         record.route = self.params['route']
         return True
-        
+
     def update(self, **context):
         for key in context:
             self.params.update({key: context[key]})
-            
+
 custom_log_filter = CustomLogFilter()
-                
+
 def log_context (**context ):
-    custom_log_filter.update(**context) 
-        
+    custom_log_filter.update(**context)
+
 def get_log():
 
+    loglevel = os.getenv('LOGLEVEL', 'INFO')
     if os.getenv('FLATLOG', False):
         log_fmt_str = "%(levelname)s: %(message)s (%(filename)s line " + \
                       "%(lineno)d/%(build_vers)s/%(maturity)s) - " + \
-                      "requestId: %(request_id)s; user_id: %(user_id)s; route: %(route)s" 
-    else:              
+                      "requestId: %(request_id)s; user_id: %(user_id)s; route: %(route)s"
+    else:
         log_fmt_str = '{"level": "%(levelname)s",  ' + \
                       '"requestId": "%(request_id)s", ' + \
                       '"message": "%(message)s", ' + \
@@ -48,7 +49,7 @@ def get_log():
                       '"lineno": %(lineno)d } '
 
     logger = logging.getLogger()
-    
+
     for h in logger.handlers:
         logger.removeHandler(h)
 
@@ -57,7 +58,7 @@ def get_log():
     h.addFilter(custom_log_filter)
     logger.addHandler(h)
     logger.setLevel(getattr(logging, loglevel))
-    
+
 
     if os.getenv("QUIETBOTO", 'TRUE').upper() == 'TRUE':
         # BOTO, be quiet plz
