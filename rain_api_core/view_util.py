@@ -99,7 +99,7 @@ def get_cookie_vars(headers: dict):
     :type: dict
     """
     cooks = get_cookies(headers)
-    log.debug('cooks: {}'.format(cooks))
+    #log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
         if JWT_COOKIE_NAME in cooks:
@@ -154,7 +154,6 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
 
 
 def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
-    log.debug('pub key: "{}"'.format(get_jwt_keys()['rsa_pub_key']))
     try:
         cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
     except jwt.ExpiredSignatureError as e:
