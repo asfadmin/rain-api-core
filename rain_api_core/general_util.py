@@ -36,10 +36,10 @@ def get_log():
     if os.getenv('FLATLOG', False):
         log_fmt_str = "%(levelname)s: %(message)s (%(filename)s line " + \
                       "%(lineno)d/%(build_vers)s/%(maturity)s) - " + \
-                      "requestId: %(request_id)s; user_id: %(user_id)s; route: %(route)s"
+                      "RequestId: %(request_id)s; user_id: %(user_id)s; route: %(route)s"
     else:
         log_fmt_str = '{"level": "%(levelname)s",  ' + \
-                      '"requestId": "%(request_id)s", ' + \
+                      '"RequestId": "%(request_id)s", ' + \
                       '"message": "%(message)s", ' + \
                       '"maturity": "%(maturity)s", ' + \
                       '"user_id": "%(user_id)s", ' + \
