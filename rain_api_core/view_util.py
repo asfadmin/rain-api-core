@@ -122,12 +122,13 @@ def get_cookie_expiration_date_str():
     return format_7231_date(get_exp_time())
 
 
-def get_cookies(hdrs):
+def get_cookies(hdrs:dict):
 
     cookies = {}
     pre_cookies = []
-    if 'cookie' in hdrs:
-        pre_cookies = hdrs['cookie'].split(';')
+    c = hdrs.get('cookie', hdrs.get('Cookie', hdrs.get('COOKIE', None)))
+    if c:
+        pre_cookies = c.split(';')
         for cook in pre_cookies:
             # print('x: {}'.format(cook))
             splitcook = cook.split('=')
