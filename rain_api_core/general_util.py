@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 
+
 class CustomLogFilter(logging.Filter):
 
     def __init__(self,  *args, **kwargs):
@@ -25,10 +26,13 @@ class CustomLogFilter(logging.Filter):
         for key in context:
             self.params.update({key: context[key]})
 
+
 custom_log_filter = CustomLogFilter()
 
-def log_context (**context ):
+
+def log_context(**context):
     custom_log_filter.update(**context)
+
 
 def get_log():
 
@@ -58,7 +62,6 @@ def get_log():
     h.addFilter(custom_log_filter)
     logger.addHandler(h)
     logger.setLevel(getattr(logging, loglevel))
-
 
     if os.getenv("QUIETBOTO", 'TRUE').upper() == 'TRUE':
         # BOTO, be quiet plz
