@@ -5,6 +5,7 @@ import re
 import urllib
 from time import time
 from json import loads
+from rain_api_core.general_util import log_context
 
 from .view_util import make_set_cookie_headers_jwt, get_exp_time, JWT_COOKIE_NAME
 from .aws_util import retrieve_secret
@@ -304,6 +305,7 @@ def do_login(args, context, cookie_domain=''):
         return 400, template_vars, {}
 
     user_id = auth['endpoint'].split('/')[-1]
+    log_context(user_id=user_id)
 
     user_profile = get_profile(user_id, auth['access_token'])
     log.debug('Got the user profile: {}'.format(user_profile))
