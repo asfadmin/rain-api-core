@@ -255,6 +255,7 @@ def user_profile_2_jwt_payload(user_id, access_token, user_profile):
             # Do we want more items in here?
             'first_name': user_profile['first_name'],
             'last_name': user_profile['last_name'],
+            'email': user_profile['email_address'],
             'urs-user-id': user_id,
             'urs-access-token': access_token,
             'urs-groups': user_profile['user_groups'],
