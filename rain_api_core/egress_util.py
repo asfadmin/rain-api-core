@@ -182,7 +182,7 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
     return False
 
 
-def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri):
+def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri=""):
 
    if bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:])):
       return True
