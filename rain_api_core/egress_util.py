@@ -176,8 +176,4 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
 def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri):
     # print("BucketToCheck: " + bucket_check + "  is equal to " + bucket_map + " " + optional_uri)
 
-    if bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:])):
-        return True
-    else:
-        return False
-
+    return bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:]))
