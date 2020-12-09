@@ -9,25 +9,22 @@ log = logging.getLogger(__name__)
 
 
 def prepend_bucketname(name):
-
     prefix = os.getenv('BUCKETNAME_PREFIX', "gsfc-ngap-{}-".format(os.getenv('MATURITY', 'DEV')[0:1].lower()))
     return "{}{}".format(prefix, name)
 
 
 def hmacsha256(key, string):
-
     return hmac.new(key, string.encode('utf-8'), sha256)
 
 
 def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET'):
-
     timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     datez = timez[:8]
-    hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "."+region_name if region_name != "us-east-1" else "")
+    hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "." + region_name if region_name != "us-east-1" else "")
 
-    cred   = session['Credentials']['AccessKeyId']
+    cred = session['Credentials']['AccessKeyId']
     secret = session['Credentials']['SecretAccessKey']
-    token  = session['Credentials']['SessionToken']
+    token = session['Credentials']['SessionToken']
 
     aws4_request = "/".join([datez, region_name, "s3", "aws4_request"])
     cred_string = "{0}/{1}".format(cred, aws4_request)
@@ -35,10 +32,10 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     # Canonical Query String Parts
     parts = ["A-userid={0}".format(user_id),
              "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-             "X-Amz-Credential="+urllib.parse.quote_plus(cred_string),
-             "X-Amz-Date="+timez,
+             "X-Amz-Credential=" + urllib.parse.quote_plus(cred_string),
+             "X-Amz-Date=" + timez,
              "X-Amz-Expires={0}".format(expire_seconds),
-             "X-Amz-Security-Token="+urllib.parse.quote_plus(token),
+             "X-Amz-Security-Token=" + urllib.parse.quote_plus(token),
              "X-Amz-SignedHeaders=host"]
 
     can_query_string = "&".join(parts)
@@ -51,11 +48,10 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     stringtosign = "\n".join(["AWS4-HMAC-SHA256", timez, aws4_request, can_req_hash])
 
     # Signing Key
-    StepOne =    hmacsha256( "AWS4{0}".format(secret).encode('utf-8'), datez).digest()
-    StepTwo =    hmacsha256( StepOne, region_name ).digest()
-    StepThree =  hmacsha256( StepTwo, "s3").digest()
-    SigningKey = hmacsha256( StepThree, "aws4_request").digest()
-
+    StepOne = hmacsha256("AWS4{0}".format(secret).encode('utf-8'), datez).digest()
+    StepTwo = hmacsha256(StepOne, region_name).digest()
+    StepThree = hmacsha256(StepTwo, "s3").digest()
+    SigningKey = hmacsha256(StepThree, "aws4_request").digest()
 
     # Final Signature
     Signature = hmacsha256(SigningKey, stringtosign).hexdigest()
@@ -66,7 +62,6 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
 
 
 def get_bucket_dynamic_path(path_list, b_map):
-
     # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
     if 'MAP' in b_map:
         map_dict = b_map['MAP']
@@ -79,7 +74,7 @@ def get_bucket_dynamic_path(path_list, b_map):
     # walk the bucket map to see if this path is valid
     for path_part in path_list:
         # Check if we hit a leaf of the YAML tree
-        if (mapping and isinstance(map_dict, str)) or 'bucket' in map_dict: #
+        if (mapping and isinstance(map_dict, str)) or 'bucket' in map_dict:  #
             customheaders = {}
             if isinstance(map_dict, dict) and 'bucket' in map_dict:
                 bucketname = map_dict['bucket']
@@ -127,7 +122,6 @@ def process_varargs(varargs: list, b_map: dict):
 
 
 def process_request(varargs, b_map):
-
     varargs = varargs.split("/")
 
     # Make sure we got at least 1 path, and 1 file name:
@@ -151,13 +145,12 @@ def process_request(varargs, b_map):
 
 
 def check_private_bucket(bucket, b_map, optional_uri=""):
-
     log.debug('check_private_buckets(): bucket: {}'.format(bucket))
 
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         for priv_bucket in b_map['PRIVATE_BUCKETS']:
-            if bucket == prepend_bucketname(priv_bucket) and bucket_prefix_ismatch(priv_bucket, b_map, optional_uri):
+            if bucket_prefix_ismatch(bucket, priv_bucket, optional_uri):
                 # This bucket is PRIVATE, return group!
                 return b_map['PRIVATE_BUCKETS'][priv_bucket]
 
@@ -165,14 +158,12 @@ def check_private_bucket(bucket, b_map, optional_uri=""):
 
 
 def check_public_bucket(bucket, b_map, optional_uri=""):
-
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
         log.debug('we have a PUBLIC_BUCKETS in the ordinary bucketmap file')
         for pub_bucket in b_map['PUBLIC_BUCKETS']:
-            #log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
-
-            if bucket == prepend_bucketname(pub_bucket) and bucket_prefix_ismatch(pub_bucket, b_map, optional_uri):
+            # log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
+            if bucket_prefix_ismatch(bucket, pub_bucket, optional_uri):
                 # This bucket is public!
                 log.debug('found a public, we\'ll take it')
                 return True
@@ -182,10 +173,11 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
     return False
 
 
-def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri=""):
+def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri):
+    # print("BucketToCheck: " + bucket_check + "  is equal to " + bucket_map + " " + optional_uri)
 
-   if bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:])):
-      return True
-   else:
-      return False
+    if bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:])):
+        return True
+    else:
+        return False
 
