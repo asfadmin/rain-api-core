@@ -150,7 +150,7 @@ def check_private_bucket(bucket, b_map, optional_uri=""):
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         for priv_bucket in b_map['PRIVATE_BUCKETS']:
-            if bucket_prefix_ismatch(bucket, priv_bucket, optional_uri) and  bucket == prepend_bucketname(priv_bucket):
+            if bucket_prefix_ismatch(bucket, priv_bucket, optional_uri):
                     # This bucket is PRIVATE, return group!
                     return b_map['PRIVATE_BUCKETS'][priv_bucket]
 
@@ -163,7 +163,7 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
         log.debug('we have a PUBLIC_BUCKETS in the ordinary bucketmap file')
         for pub_bucket in b_map['PUBLIC_BUCKETS']:
             # log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
-            if bucket_prefix_ismatch(bucket, pub_bucket, optional_uri) and bucket == prepend_bucketname(pub_bucket):
+            if bucket_prefix_ismatch(bucket, pub_bucket, optional_uri):
                 # This bucket is public!
                 log.debug('found a public, we\'ll take it')
                 return True
@@ -174,5 +174,5 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
 
 
 def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri):
-    #if bucket == prepend_bucketname(pub_bucket):
-    return bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:]))
+    bucket = prepend_bucketname(bucket_check)
+    return bucket == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:]))
