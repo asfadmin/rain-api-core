@@ -150,11 +150,10 @@ def check_private_bucket(bucket, b_map, optional_uri=""):
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         for priv_bucket in b_map['PRIVATE_BUCKETS']:
-            bucket = prepend_bucketname(priv_bucket)
             if optional_uri != "" and bucket == prepend_bucketname(priv_bucket):
                 # This bucket is PRIVATE, return group!
                 return b_map['PRIVATE_BUCKETS'][priv_bucket]
-            elif bucket_prefix_ismatch(bucket, priv_bucket, optional_uri):
+            if bucket_prefix_ismatch(bucket, priv_bucket, optional_uri):
                 # This bucket is PRIVATE, return group!
                 return b_map['PRIVATE_BUCKETS'][priv_bucket]
 
@@ -171,7 +170,7 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
                 # This bucket is public!
                 log.debug('found a public, we\'ll take it')
                 return True
-            elif bucket_prefix_ismatch(bucket, pub_bucket, optional_uri):
+            if bucket_prefix_ismatch(bucket, pub_bucket, optional_uri):
                 # This bucket is public!
                 log.debug('found a public, we\'ll take it')
                 return True
