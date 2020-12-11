@@ -163,7 +163,8 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
         log.debug('we have a PUBLIC_BUCKETS in the ordinary bucketmap file')
         for pub_bucket in b_map['PUBLIC_BUCKETS']:
             # log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
-            if bucket_prefix_ismatch(bucket, pub_bucket, optional_uri):
+            bucket = prepend_bucketname(pub_bucket)
+            if bucket_prefix_ismatch(bucket, b_map, optional_uri):
                 # This bucket is public!
                 log.debug('found a public, we\'ll take it')
                 return True
@@ -174,5 +175,4 @@ def check_public_bucket(bucket, b_map, optional_uri=""):
 
 
 def bucket_prefix_ismatch(bucket_check, bucket_map, optional_uri):
-    bucket = prepend_bucketname(bucket_check)
-    return bucket == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:]))
+    return bucket_check == bucket_map.split('/')[0] and optional_uri.startswith("/".join(bucket_map.split('/')[1:]))
