@@ -149,31 +149,36 @@ def process_request(varargs, b_map):
 
     return path, bucket, object_name, headers
 
+def bucket_prefix_match(bucket_check, bucket_map, object_name=""):
+    log.debug(f"bucket_prefix_match(): checking if {bucket_check} matches {bucket_map} w/ optional obj '{object_name}'")
+    if bucket_check == bucket_map.split('/')[0] and object_name.startswith("/".join(bucket_map.split('/')[1:])):
+        log.debug(f"Prefixed Bucket Map matched: s3://{bucket_check}/{object_name} => {bucket_map}")
+        return True
+    return False
 
-def check_private_bucket(bucket, b_map):
+def check_private_bucket(bucket, b_map, object_name=""):
 
     log.debug('check_private_buckets(): bucket: {}'.format(bucket))
 
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         for priv_bucket in b_map['PRIVATE_BUCKETS']:
-            if bucket == prepend_bucketname(priv_bucket):
+            if bucket_prefix_match(bucket, prepend_bucketname(priv_bucket), object_name):
                 # This bucket is PRIVATE, return group!
                 return b_map['PRIVATE_BUCKETS'][priv_bucket]
 
     return False
 
 
-def check_public_bucket(bucket, b_map):
+def check_public_bucket(bucket, b_map, object_name=""):
 
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
         log.debug('we have a PUBLIC_BUCKETS in the ordinary bucketmap file')
         for pub_bucket in b_map['PUBLIC_BUCKETS']:
-            #log.debug('is {} the same as {}?'.format(bucket, prepend_bucketname(pub_bucket)))
-            if bucket == prepend_bucketname(pub_bucket):
+            if bucket_prefix_match(bucket, prepend_bucketname(pub_bucket), object_name):
                 # This bucket is public!
-                log.debug('found a public, we\'ll take it')
+                log.debug("found a public, we'll take it")
                 return True
 
     # Did not find this in public bucket list
