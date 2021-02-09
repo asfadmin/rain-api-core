@@ -141,8 +141,7 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
 
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
-        encoded_bytes = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
-        encoded = encoded_bytes.decode('utf-8')
+        encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
         return encoded
     except IndexError as e:
         log.error('jwt_keys may be malformed: ')
