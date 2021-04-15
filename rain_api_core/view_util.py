@@ -166,8 +166,8 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         return {}
 
     set_jwt_blacklist()
-    if is_jwt_blacklisted(cookiedecoded):  # TODO: Make sure the correct info is being passed in
-        log.info(f"JWT {cookiedecoded} is blacklisted")  # TODO: Make sure its logging the JWT
+    if is_jwt_blacklisted(cookiedecoded):
+        log.info(f"JWT {cookiedecoded} is blacklisted")
         return {}
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
