@@ -204,7 +204,7 @@ def is_jwt_blacklisted(decoded_jwt):
 
 def set_jwt_blacklist():
     global JWT_BLACKLIST
-    if JWT_BLACKLIST:  # If Cached
+    if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10*60):  # If cached in the last 10 minutes
         return JWT_BLACKLIST
 
     bucket = "asf.public.code"
@@ -212,7 +212,10 @@ def set_jwt_blacklist():
 
     s3_client = botoclient('s3')
     obj = s3_client.get_object(Bucket=bucket, Key=key)
-    contents = json.loads(obj['Body'].read())
+    contents = {
+        "blacklist": json.loads(obj['Body'].read())["blacklist"],
+        "timestamp": time()
+    }
 
     JWT_BLACKLIST = contents  # Cache it
     return contents
