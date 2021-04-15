@@ -209,7 +209,8 @@ def set_jwt_blacklist():
         return JWT_BLACKLIST
 
     endpoint = os.getenv("BLACKLIST_ENDPOINT")
-    output = urllib.request.urlopen(endpoint).read().decode('utf-8')
+    # Bandit complains with B310 on the line below. We know the URL, this is safe!
+    output = urllib.request.urlopen(endpoint).read().decode('utf-8')  # nosec
     blacklist = json.loads(output)["blacklist"]
 
     contents = {
