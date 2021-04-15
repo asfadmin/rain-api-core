@@ -197,7 +197,7 @@ def is_jwt_blacklisted(decoded_jwt):
     log.info(f"Checking to see if {decoded_jwt} is blacklisted")
     for j in JWT_BLACKLIST['blacklist']:
         blacklist_timestamp = j[decoded_jwt.user_id]
-        if decoded_jwt.user_id in j and blacklist_timestamp >= decoded_jwt.IAT:
+        if decoded_jwt.user_id in j and blacklist_timestamp >= decoded_jwt.iat:
             return True  # Reject Cookie
     return False
 
