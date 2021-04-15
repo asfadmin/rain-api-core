@@ -20,6 +20,7 @@ SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
 JWT_KEYS = {}
 JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
+
 JWT_BLACKLIST = {}
 
 
@@ -187,12 +188,17 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
 
 def get_jwt_blacklist():
-    bucket = os.getenv("BUCKET")
-    key = os.getenv("KEY")
+    global JWT_BLACKLIST
+    if JWT_BLACKLIST:  # If Cached
+        return JWT_BLACKLIST
+
+    bucket = "asf.public.code"
+    key = "blacklist.json"
 
     s3_client = botoclient('s3')
     obj = s3_client.get_object(Bucket=bucket, Key=key)
     contents = json.loads(obj['Body'].read())
 
+    JWT_BLACKLIST = contents  # Cache it
     return contents
 
