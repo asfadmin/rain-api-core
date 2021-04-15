@@ -204,7 +204,7 @@ def is_jwt_blacklisted(decoded_jwt):
 
 
 def set_jwt_blacklist():
-    global JWT_BLACKLIST
+    global JWT_BLACKLIST  # pylint: disable=global-statement
     if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10*60):  # If cached in the last 10 minutes
         return JWT_BLACKLIST
 
