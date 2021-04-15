@@ -163,6 +163,12 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     except jwt.InvalidSignatureError as e:
         log.info('JWT has failed verification. returning empty dict')
         return {}
+
+    set_jwt_blacklist()
+    if is_jwt_blacklisted(cookiedecoded):  # TODO: Make sure the correct info is being passed in
+        log.info(f"JWT {cookiedecoded} is blacklisted")  # TODO: Make sure its logging the JWT
+        return {}
+
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
 
@@ -187,7 +193,16 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
     return headers
 
 
-def get_jwt_blacklist():
+def is_jwt_blacklisted(decoded_jwt):
+    log.info(f"Checking to see if {decoded_jwt} is blacklisted")
+    for j in JWT_BLACKLIST['blacklist']:
+        blacklist_timestamp = j[decoded_jwt.user_id]
+        if decoded_jwt.user_id in j and blacklist_timestamp >= decoded_jwt.IAT:
+            return True  # Reject Cookie
+    return False
+
+
+def set_jwt_blacklist():
     global JWT_BLACKLIST
     if JWT_BLACKLIST:  # If Cached
         return JWT_BLACKLIST
