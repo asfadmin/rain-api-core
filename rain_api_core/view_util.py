@@ -1,6 +1,7 @@
 import logging
 import os
 import jwt
+import json
 import base64
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
@@ -9,17 +10,17 @@ from time import time
 
 from .aws_util import retrieve_secret
 
-
 log = logging.getLogger(__name__)
 
 HTML_TEMPLATE_STATUS = ''
-HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'                         #nosec We want to leverage instance persistance
+HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'  # nosec We want to leverage instance persistance
 
 SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 
 JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
 JWT_KEYS = {}
 JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
+JWT_BLACKLIST = {}
 
 
 def get_jwt_keys():
@@ -51,7 +52,7 @@ def cache_html_templates():
 
     bucket = os.getenv('CONFIG_BUCKET')
     templatedir = os.getenv('HTML_TEMPLATE_DIR')
-    if not templatedir[-1] == '/': #we need a trailing slash
+    if not templatedir[-1] == '/':  # we need a trailing slash
         templatedir = '{}/'.format(templatedir)
 
     client = botoclient('s3')
@@ -70,15 +71,15 @@ def cache_html_templates():
         return 'ERROR'
 
 
-def get_html_body(template_vars: dict, templatefile: str='root.html'):
-
-    global HTML_TEMPLATE_STATUS                                                       # pylint: disable=global-statement
+def get_html_body(template_vars: dict, templatefile: str = 'root.html'):
+    global HTML_TEMPLATE_STATUS  # pylint: disable=global-statement
 
     if HTML_TEMPLATE_STATUS == '':
         HTML_TEMPLATE_STATUS = cache_html_templates()
 
     jin_env = Environment(
-        loader=FileSystemLoader([HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
+        loader=FileSystemLoader(
+            [HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
         autoescape=select_autoescape(['html', 'xml'])
     )
     try:
@@ -99,7 +100,7 @@ def get_cookie_vars(headers: dict):
     :type: dict
     """
     cooks = get_cookies(headers)
-    #log.debug('cooks: {}'.format(cooks))
+    # log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
         if JWT_COOKIE_NAME in cooks:
@@ -122,8 +123,7 @@ def get_cookie_expiration_date_str():
     return format_7231_date(get_exp_time())
 
 
-def get_cookies(hdrs:dict):
-
+def get_cookies(hdrs: dict):
     cookies = {}
     pre_cookies = []
     c = hdrs.get('cookie', hdrs.get('Cookie', hdrs.get('COOKIE', None)))
@@ -138,7 +138,6 @@ def get_cookies(hdrs:dict):
 
 
 def make_jwt_payload(payload, algo=JWT_ALGO):
-
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
         encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
@@ -187,5 +186,13 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
     return headers
 
 
+def get_jwt_blacklist():
+    bucket = os.getenv("BUCKET")
+    key = os.getenv("KEY")
 
+    s3_client = botoclient('s3')
+    obj = s3_client.get_object(Bucket=bucket, Key=key)
+    contents = json.loads(obj['Body'].read())
+
+    return contents
 
