@@ -3,6 +3,7 @@ import os
 import jwt
 import json
 import base64
+import urllib
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
@@ -196,8 +197,8 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 def is_jwt_blacklisted(decoded_jwt):
     log.info(f"Checking to see if {decoded_jwt} is blacklisted")
     for j in JWT_BLACKLIST['blacklist']:
-        blacklist_timestamp = j[decoded_jwt.user_id]
-        if decoded_jwt.user_id in j and blacklist_timestamp >= decoded_jwt.iat:
+        # j["urs-user-id"] is the timestamp
+        if decoded_jwt["urs-user-id"] in j and j["urs-user-id"] >= decoded_jwt["iat"]:
             return True  # Reject Cookie
     return False
 
@@ -207,13 +208,12 @@ def set_jwt_blacklist():
     if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10*60):  # If cached in the last 10 minutes
         return JWT_BLACKLIST
 
-    bucket = "asf.public.code"
-    key = "blacklist.json"
+    endpoint = os.getenv("BLACKLIST_ENDPOINT")
+    output = urllib.request.urlopen(endpoint).read().decode('utf-8')
+    blacklist = json.loads(output)["blacklist"]
 
-    s3_client = botoclient('s3')
-    obj = s3_client.get_object(Bucket=bucket, Key=key)
     contents = {
-        "blacklist": json.loads(obj['Body'].read())["blacklist"],
+        "blacklist": blacklist,
         "timestamp": time()
     }
 
