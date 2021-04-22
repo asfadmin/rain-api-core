@@ -37,7 +37,7 @@ def log_context(**context):
 def get_log():
 
     loglevel = os.getenv('LOGLEVEL', 'INFO')
-    logtype = os.getenv('LOGTYPE', 'json') == 'flat'
+    logtype = os.getenv('LOGTYPE', 'json')
     if logtype == 'flat':
         log_fmt_str = "%(levelname)s: %(message)s (%(filename)s line " + \
                       "%(lineno)d/%(build_vers)s/%(maturity)s) - " + \
