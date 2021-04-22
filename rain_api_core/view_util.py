@@ -195,17 +195,26 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
 
 def is_jwt_blacklisted(decoded_jwt):
-    log.info(f"Checking to see if {decoded_jwt} is blacklisted")
-    for j in JWT_BLACKLIST['blacklist']:
-        # j["urs-user-id"] is the timestamp
-        if decoded_jwt["urs-user-id"] in j and j["urs-user-id"] >= decoded_jwt["iat"]:
-            return True  # Reject Cookie
+    urs_user_id = decoded_jwt["urs-user-id"]
+
+    if decoded_jwt["urs-user-id"] in JWT_BLACKLIST["blacklist"]:
+        jwt_mint_time = decoded_jwt["iat"]
+        user_blacklist_time = JWT_BLACKLIST["blacklist"][urs_user_id]
+        log.debug(f"JWT was minted @:  {jwt_mint_time}, Blacklist is for cookies BEFORE: {user_blacklist_time}")
+
+        if user_blacklist_time >= jwt_mint_time:
+            log.info(f"User {urs_user_id}'s JWT was minted before blacklist date and is INVALID")
+            return True
+        else:
+            log.info(f"User {urs_user_id}s JWT was minted AFTER blacklist date and is still VALID")
+
+    log.info(f"User {urs_user_id} is NOT in the blacklist")
     return False
 
 
 def set_jwt_blacklist():
     global JWT_BLACKLIST  # pylint: disable=global-statement
-    if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10*60):  # If cached in the last 10 minutes
+    if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10 * 60):  # If cached in the last 10 minutes
         return JWT_BLACKLIST
 
     endpoint = os.getenv("BLACKLIST_ENDPOINT")
@@ -220,4 +229,3 @@ def set_jwt_blacklist():
 
     JWT_BLACKLIST = contents  # Cache it
     return contents
-
