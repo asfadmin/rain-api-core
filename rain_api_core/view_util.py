@@ -165,7 +165,6 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         log.info('JWT has failed verification. returning empty dict')
         return {}
 
-    set_jwt_blacklist()
     if is_jwt_blacklisted(cookiedecoded):
         log.info(f"JWT {cookiedecoded} is blacklisted")
         return {}
@@ -195,6 +194,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
 
 def is_jwt_blacklisted(decoded_jwt):
+    set_jwt_blacklist()
     urs_user_id = decoded_jwt["urs-user-id"]
 
     if decoded_jwt["urs-user-id"] in JWT_BLACKLIST["blacklist"]:
