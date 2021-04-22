@@ -197,7 +197,7 @@ def is_jwt_blacklisted(decoded_jwt):
     set_jwt_blacklist()
     urs_user_id = decoded_jwt["urs-user-id"]
 
-    if decoded_jwt["urs-user-id"] in JWT_BLACKLIST["blacklist"]:
+    if urs_user_id in JWT_BLACKLIST["blacklist"]:
         jwt_mint_time = decoded_jwt["iat"]
         user_blacklist_time = JWT_BLACKLIST["blacklist"][urs_user_id]
         log.debug(f"JWT was minted @:  {jwt_mint_time}, Blacklist is for cookies BEFORE: {user_blacklist_time}")
