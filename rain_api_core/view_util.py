@@ -165,9 +165,9 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         log.info('JWT has failed verification. returning empty dict')
         return {}
 
-    if is_jwt_blacklisted(cookiedecoded):
-        log.info(f"JWT {cookiedecoded} is blacklisted")
-        return {}
+    # if is_jwt_blacklisted(cookiedecoded):
+    #     log.info(f"JWT {cookiedecoded} is blacklisted")
+    #     return {}
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
