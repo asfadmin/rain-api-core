@@ -165,9 +165,9 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         log.info('JWT has failed verification. returning empty dict')
         return {}
 
-    if is_jwt_blacklisted(cookiedecoded):
-        log.info(f"JWT {cookiedecoded} is blacklisted")
-        return {}
+    if os.getenv("BLACKLIST_ENDPOINT"):
+        if is_jwt_blacklisted(cookiedecoded):
+            return {}
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
@@ -214,10 +214,11 @@ def is_jwt_blacklisted(decoded_jwt):
 
 def set_jwt_blacklist():
     global JWT_BLACKLIST  # pylint: disable=global-statement
+
     if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10 * 60):  # If cached in the last 10 minutes
         return JWT_BLACKLIST
 
-    endpoint = os.getenv("BLACKLIST_ENDPOINT", "https://s3-us-west-2.amazonaws.com/asf.rain.code.usw2/jwt_blacklist.json")
+    endpoint = os.getenv("BLACKLIST_ENDPOINT")
     # Bandit complains with B310 on the line below. We know the URL, this is safe!
     output = urllib.request.urlopen(endpoint).read().decode('utf-8')  # nosec
     blacklist = json.loads(output)["blacklist"]
