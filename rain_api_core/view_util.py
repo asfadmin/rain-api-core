@@ -1,7 +1,9 @@
 import logging
 import os
 import jwt
+import json
 import base64
+import urllib
 from boto3 import client as botoclient
 from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
@@ -9,17 +11,18 @@ from time import time
 
 from .aws_util import retrieve_secret
 
-
 log = logging.getLogger(__name__)
 
 HTML_TEMPLATE_STATUS = ''
-HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'                         #nosec We want to leverage instance persistance
+HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'  # nosec We want to leverage instance persistance
 
 SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 
 JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
 JWT_KEYS = {}
 JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
+
+JWT_BLACKLIST = {}
 
 
 def get_jwt_keys():
@@ -51,7 +54,7 @@ def cache_html_templates():
 
     bucket = os.getenv('CONFIG_BUCKET')
     templatedir = os.getenv('HTML_TEMPLATE_DIR')
-    if not templatedir[-1] == '/': #we need a trailing slash
+    if not templatedir[-1] == '/':  # we need a trailing slash
         templatedir = '{}/'.format(templatedir)
 
     client = botoclient('s3')
@@ -70,15 +73,15 @@ def cache_html_templates():
         return 'ERROR'
 
 
-def get_html_body(template_vars: dict, templatefile: str='root.html'):
-
-    global HTML_TEMPLATE_STATUS                                                       # pylint: disable=global-statement
+def get_html_body(template_vars: dict, templatefile: str = 'root.html'):
+    global HTML_TEMPLATE_STATUS  # pylint: disable=global-statement
 
     if HTML_TEMPLATE_STATUS == '':
         HTML_TEMPLATE_STATUS = cache_html_templates()
 
     jin_env = Environment(
-        loader=FileSystemLoader([HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
+        loader=FileSystemLoader(
+            [HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
         autoescape=select_autoescape(['html', 'xml'])
     )
     try:
@@ -99,7 +102,7 @@ def get_cookie_vars(headers: dict):
     :type: dict
     """
     cooks = get_cookies(headers)
-    #log.debug('cooks: {}'.format(cooks))
+    # log.debug('cooks: {}'.format(cooks))
     cookie_vars = {}
     try:
         if JWT_COOKIE_NAME in cooks:
@@ -122,8 +125,7 @@ def get_cookie_expiration_date_str():
     return format_7231_date(get_exp_time())
 
 
-def get_cookies(hdrs:dict):
-
+def get_cookies(hdrs: dict):
     cookies = {}
     pre_cookies = []
     c = hdrs.get('cookie', hdrs.get('Cookie', hdrs.get('COOKIE', None)))
@@ -138,7 +140,6 @@ def get_cookies(hdrs:dict):
 
 
 def make_jwt_payload(payload, algo=JWT_ALGO):
-
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
         encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
@@ -163,6 +164,11 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     except jwt.InvalidSignatureError as e:
         log.info('JWT has failed verification. returning empty dict')
         return {}
+
+    if os.getenv("BLACKLIST_ENDPOINT"):
+        if is_jwt_blacklisted(cookiedecoded):
+            return {}
+
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
 
@@ -187,5 +193,40 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
     return headers
 
 
+def is_jwt_blacklisted(decoded_jwt):
+    set_jwt_blacklist()
+    urs_user_id = decoded_jwt["urs-user-id"]
+
+    if urs_user_id in JWT_BLACKLIST["blacklist"]:
+        jwt_mint_time = decoded_jwt["iat"]
+        user_blacklist_time = JWT_BLACKLIST["blacklist"][urs_user_id]
+        log.debug(f"JWT was minted @:  {jwt_mint_time}, the Blacklist is for cookies BEFORE: {user_blacklist_time}")
+
+        if user_blacklist_time >= jwt_mint_time:
+            log.info(f"User {urs_user_id}'s JWT was minted before blacklist date and is INVALID")
+            return True
+        else:
+            log.info(f"User {urs_user_id}s JWT was minted AFTER blacklist date and is still VALID")
+
+    log.info(f"User {urs_user_id} is NOT in the blacklist")
+    return False
 
 
+def set_jwt_blacklist():
+    global JWT_BLACKLIST  # pylint: disable=global-statement
+
+    if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10 * 60):  # If cached in the last 10 minutes
+        return JWT_BLACKLIST
+
+    endpoint = os.getenv("BLACKLIST_ENDPOINT")
+    # Bandit complains with B310 on the line below. We know the URL, this is safe!
+    output = urllib.request.urlopen(endpoint).read().decode('utf-8')  # nosec
+    blacklist = json.loads(output)["blacklist"]
+
+    contents = {
+        "blacklist": blacklist,
+        "timestamp": time()
+    }
+
+    JWT_BLACKLIST = contents  # Cache it
+    return contents
