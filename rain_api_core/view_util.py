@@ -169,7 +169,7 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         if is_jwt_blacklisted(cookiedecoded):
             return {}
     else:
-        log.info(f'No environment variable "BLACKLIST_ENDPOINT')
+        log.info(f'No environment variable "BLACKLIST_ENDPOINT"')
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
