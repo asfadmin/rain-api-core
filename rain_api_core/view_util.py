@@ -198,6 +198,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 def is_jwt_blacklisted(decoded_jwt):
     set_jwt_blacklist()
     urs_user_id = decoded_jwt["urs-user-id"]
+    log.info(f"Decoded JWT {decoded_jwt}")
 
     if urs_user_id in JWT_BLACKLIST["blacklist"]:
         jwt_mint_time = decoded_jwt["iat"]
