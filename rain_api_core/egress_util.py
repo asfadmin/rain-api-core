@@ -162,7 +162,10 @@ def check_private_bucket(bucket, b_map, object_name=""):
 
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
-        for priv_bucket in b_map['PRIVATE_BUCKETS']:
+        # Prioritize prefixed buckets first, the deeper the better!
+        sorted_buckets = sorted(list(b_map['PRIVATE_BUCKETS'].keys()), key=lambda e: e.count("/"), reverse=True ) 
+        log.debug(f"Sorted PRIVATE buckets are {sorted_buckets}")
+        for priv_bucket in sorted_buckets:
             if bucket_prefix_match(bucket, prepend_bucketname(priv_bucket), object_name):
                 # This bucket is PRIVATE, return group!
                 return b_map['PRIVATE_BUCKETS'][priv_bucket]
@@ -174,8 +177,10 @@ def check_public_bucket(bucket, b_map, object_name=""):
 
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
-        log.debug('we have a PUBLIC_BUCKETS in the ordinary bucketmap file')
-        for pub_bucket in b_map['PUBLIC_BUCKETS']:
+        # Prioritize prefixed buckets first, the deeper the better!
+        sorted_buckets = sorted(list(b_map['PUBLIC_BUCKETS'].keys()), key=lambda e: e.count("/"), reverse=True ) 
+        log.debug(f"Sorted PUBLIC buckets are {sorted_buckets}")
+        for pub_bucket in sorted_buckets:
             if bucket_prefix_match(bucket, prepend_bucketname(pub_bucket), object_name):
                 # This bucket is public!
                 log.debug("found a public, we'll take it")
