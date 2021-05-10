@@ -156,6 +156,23 @@ def bucket_prefix_match(bucket_check, bucket_map, object_name=""):
         return True
     return False
 
+
+# Sort public/private buckets such that object-prefixes are processed FIRST
+def get_sorted_bucket_list(b_map, bucket_group):
+    if bucket_group not in b_map:
+        # But why?!
+        log.warning(f"Bucket map does not contain bucket group '{bucket_group}'")
+        return []
+    
+    # b_map[bucket_group] SHOULD be a dict, but list actually works too.
+    if  isinstance(b_map[bucket_group], dict):
+        return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True )
+    if isinstance(b_map[bucket_group], list):
+        return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True )
+    
+    # Something went wrong.
+    return []
+
 def check_private_bucket(bucket, b_map, object_name=""):
 
     log.debug('check_private_buckets(): bucket: {}'.format(bucket))
@@ -163,7 +180,7 @@ def check_private_bucket(bucket, b_map, object_name=""):
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         # Prioritize prefixed buckets first, the deeper the better!
-        sorted_buckets = sorted(list(b_map['PRIVATE_BUCKETS'].keys()), key=lambda e: e.count("/"), reverse=True ) 
+        sorted_buckets = get_sorted_bucket_list(b_map, 'PRIVATE_BUCKETS')
         log.debug(f"Sorted PRIVATE buckets are {sorted_buckets}")
         for priv_bucket in sorted_buckets:
             if bucket_prefix_match(bucket, prepend_bucketname(priv_bucket), object_name):
@@ -172,13 +189,11 @@ def check_private_bucket(bucket, b_map, object_name=""):
 
     return False
 
-
 def check_public_bucket(bucket, b_map, object_name=""):
 
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
-        # Prioritize prefixed buckets first, the deeper the better!
-        sorted_buckets = sorted(list(b_map['PUBLIC_BUCKETS'].keys()), key=lambda e: e.count("/"), reverse=True ) 
+        sorted_buckets = get_sorted_bucket_list(b_map, 'PUBLIC_BUCKETS')
         log.debug(f"Sorted PUBLIC buckets are {sorted_buckets}")
         for pub_bucket in sorted_buckets:
             if bucket_prefix_match(bucket, prepend_bucketname(pub_bucket), object_name):
