@@ -166,8 +166,11 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         return {}
 
     if os.getenv("BLACKLIST_ENDPOINT"):
-        if is_jwt_blacklisted(cookiedecoded):
-            return {}
+        try:
+            if is_jwt_blacklisted(cookiedecoded):
+                return {}
+        except Exception as e:
+            log.debug(f"Received the following error while checking the given JWT against the blacklist: {e}")
     else:
         log.debug(f'No environment variable "BLACKLIST_ENDPOINT"')
 
