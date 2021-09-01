@@ -7,6 +7,8 @@ from netaddr import IPAddress, IPNetwork
 from json import loads
 from time import time
 from yaml import safe_load
+from socket import timeout
+from urllib.error import HTTPError, URLError
 from boto3 import client as botoclient, resource as botoresource, session as botosession, Session as boto_Session
 from boto3.resources.base import ServiceResource
 from botocore.config import Config as bc_Config
@@ -208,8 +210,16 @@ def get_region_cidr_ranges():
     if not region_list_cache:                                                    #pylint: disable=used-before-assignment
         url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
         req = urllib.request.Request(url)
-        r = urllib.request.urlopen(req).read()                               #nosec URL is *always* https://ip-ranges...
-
+        try:
+            r = urllib.request.urlopen(req, timeout=2).read()                               #nosec URL is *always* https://ip-ranges...
+        except (HTTPError, URLError) as error:
+            if isinstance(error.reason, timeout):
+                # If we're waiting more than 2 seconds, give up!
+                log.error(f'Timeout (2sec) trying to fetch {url}')
+            else:
+                log.error(f'Could not download {url}: {error}')
+            log.warning(f'Could not download AWS Region IPs. Will try again later')
+            return []
         region_list_json = loads(r.decode('utf-8'))
         region_list_cache = []
 
