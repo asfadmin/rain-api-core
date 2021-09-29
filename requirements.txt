@@ -6,7 +6,7 @@ chalice==1.25.0
 netaddr==0.8.0
 pyjwt==2.1.0
 jwcrypto==0.9.1
-pyOpenSSL==20.0.1 # maybe not necessary
+pyOpenSSL==21.0.0 # maybe not necessary
 python-jose==3.3.0
 
 
