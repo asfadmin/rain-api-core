@@ -40,10 +40,6 @@ class CustomLogFilter(logging.Filter):
     def update(self, **context):
         for key in context:
             self.params.update({key: context[key]})
-            
-
-
-
 
 custom_log_filter = CustomLogFilter()
 
