@@ -148,6 +148,7 @@ def get_new_token_and_profile(user_id, cookietoken):
         t2 = time()
         log.info("Retrieved new token: {0}".format(new_token))
         log.debug('ET for get_new_token_and_profile() urlopen() {} sec'.format(t1 - t0))
+        log.info({"timing":{"service": "EDL", "endpoint": url, "request_type": "GET", "duration": (t2 - t0), "unit": "seconds"}})
         log.debug('ET for get_new_token_and_profile() response.read() and loads() {} sec'.format(t2- t1))
         # Get user profile with new token
         return get_profile(user_id, cookietoken, new_token)
