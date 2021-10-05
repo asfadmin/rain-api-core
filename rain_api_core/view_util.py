@@ -10,6 +10,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNot
 from time import time
 
 from .aws_util import retrieve_secret
+from rain_api_core.general_util import return_timing_object, d 
 
 log = logging.getLogger(__name__)
 
@@ -59,13 +60,17 @@ def cache_html_templates():
 
     client = botoclient('s3')
     try:
+        timer = time()
         result = client.list_objects(Bucket=bucket, Prefix=templatedir, Delimiter='/')
+        log.info(return_timing_object(service="s3", endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)", duration=d(timer)))
 
         for o in result.get('Contents'):
             filename = os.path.basename(o['Key'])
             if filename:
                 log.debug('attempting to save {}'.format(os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename)))
+                timer = time()
                 client.download_file(bucket, o['Key'], os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename))
+                log.info(return_timing_object(service="s3", endpoint=f"client().download_file(s3://{bucket}/{o['Key']})", duration=d(timer)))
         return 'CACHED'
     except (TypeError, KeyError) as e:
         log.error(e)
@@ -225,7 +230,9 @@ def set_jwt_blacklist():
 
     endpoint = os.getenv("BLACKLIST_ENDPOINT")
     # Bandit complains with B310 on the line below. We know the URL, this is safe!
+    timer = time()
     output = urllib.request.urlopen(endpoint).read().decode('utf-8')  # nosec
+    log.info(return_timing_object(service="blacklist", endpoint=endpoint, duration=d(timer)))
     blacklist = json.loads(output)["blacklist"]
 
     contents = {
