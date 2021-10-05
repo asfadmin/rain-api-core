@@ -12,6 +12,8 @@ from boto3.resources.base import ServiceResource
 from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
+from rain_api_core.general_util import return_timing_object
+
 log = logging.getLogger(__name__)
 sts = botoclient('sts')
 secret_cache = {}
@@ -58,9 +60,11 @@ def retrieve_secret(secret_name):
     # We rethrow the exception by default.
 
     try:
+        timer = time()
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
+        log.info(return_timing_object(service="secretsmanager", endpoint="client.get_secret_value()", duration=(time() - timer)))
     except ClientError as e:
         log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
         raise e
@@ -88,7 +92,9 @@ def get_s3_resource():
         # Swift signature compatability
         if os.getenv('S3_SIGNATURE_VERSION'):
             params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
+        timer = time()
         s3_resource = botoresource('s3', **params)
+        
     return s3_resource
 
 
@@ -111,7 +117,10 @@ def read_s3(bucket: str, key: str, s3: ServiceResource=None):
     log.info("Downloading config file {0} from s3://{1}...".format(key, bucket))
     obj = s3.Object(bucket, key)
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
-    return obj.get()['Body'].read().decode('utf-8')
+    timer = time()
+    body =  obj.get()['Body'].read().decode('utf-8')
+    log.info(return_timing_object(service="s3", endpoint="Object().get()", duration=(time() - timer)))
+    return body
 
 
 def get_yaml(bucket: str, file_name: str, s3: ServiceResource=None):
@@ -167,11 +176,13 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
+        log.info(return_timing_object(service="sts", endpoint="assume_role()", duration=(time() - now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
         # If the session has been active for more than 10 minutes, grab a new one.
         log.info("Replacing 10 minute old session for {0}".format(user_id))
         fresh_session = sts.assume_role(**session_params)
+        log.info(return_timing_object(service="sts", endpoint="assume_role()", duration=(time() - now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     else:
         log.info("Reusing role credentials for {0}".format(user_id))
@@ -189,10 +200,12 @@ def get_role_session(creds=None, user_id=None):
     
     session_id = sts_resp['AssumedRoleUser']['AssumedRoleId']
     if session_id not in session_cache:
+        now = time()
         session_cache[session_id] = boto_Session(
                                         aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
                                         aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
                                         aws_session_token=sts_resp['Credentials']['SessionToken'])
+        log.info(return_timing_object(service="session", endpoint="boto3.session()", method="Instantiation", duration=(time() - now)))
     else:
         log.info("Reusing session {0}".format(session_id))
     return session_cache[session_id]
@@ -207,9 +220,10 @@ def get_region_cidr_ranges():
 
     if not region_list_cache:                                                    #pylint: disable=used-before-assignment
         url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
+        now = time()
         req = urllib.request.Request(url)
         r = urllib.request.urlopen(req).read()                               #nosec URL is *always* https://ip-ranges...
-
+        log.info(return_timing_object(service="AWS", endpoint=url, duration=(time() - now)))
         region_list_json = loads(r.decode('utf-8'))
         region_list_cache = []
 
