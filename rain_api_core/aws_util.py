@@ -12,7 +12,7 @@ from boto3.resources.base import ServiceResource
 from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
-from rain_api_core.general_util import return_timing_object
+from rain_api_core.general_util import return_timing_object, d
 
 log = logging.getLogger(__name__)
 sts = botoclient('sts')
@@ -64,7 +64,7 @@ def retrieve_secret(secret_name):
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
-        log.info(return_timing_object(service="secretsmanager", endpoint="client().get_secret_value()", duration=(time() - timer)))
+        log.info(return_timing_object(service="secretsmanager", endpoint=f"client().get_secret_value({secret_name})", duration=d(timer)))
     except ClientError as e:
         log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
         raise e
@@ -119,7 +119,7 @@ def read_s3(bucket: str, key: str, s3: ServiceResource=None):
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
     timer = time()
     body =  obj.get()['Body'].read().decode('utf-8')
-    log.info(return_timing_object(service="s3", endpoint="resource().Object().get()", duration=(time() - timer)))
+    log.info(return_timing_object(service="s3", endpoint=f"resource().Object(s3://{bucket}/{key}).get()", duration=d(timer)))
     return body
 
 
@@ -167,7 +167,8 @@ def get_role_creds(user_id: str='', in_region: bool=False):
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN')
     else:
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
-        
+    dl_arn_name=download_role_arn.split("/")[-1]    
+    
     # chained role assumption like this CANNOT currently be extended past 1 Hour.
     # https://aws.amazon.com/premiumsupport/knowledge-center/iam-role-chaining-limit/
     now = time()
@@ -176,13 +177,13 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
-        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=(time() - now)))
+        log.info(return_timing_object(service="sts", endpoint=f"client().assume_role({dl_arn_name}/{user_id})", duration=d(now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
         # If the session has been active for more than 10 minutes, grab a new one.
         log.info("Replacing 10 minute old session for {0}".format(user_id))
         fresh_session = sts.assume_role(**session_params)
-        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=(time() - now)))
+        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=d(now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     else:
         log.info("Reusing role credentials for {0}".format(user_id))
@@ -205,7 +206,7 @@ def get_role_session(creds=None, user_id=None):
                                         aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
                                         aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
                                         aws_session_token=sts_resp['Credentials']['SessionToken'])
-        log.info(return_timing_object(service="boto3", endpoint="boto3.session()", duration=(time() - now)))
+        log.info(return_timing_object(service="boto3", endpoint="boto3.session()", duration=d(now)))
     else:
         log.info("Reusing session {0}".format(session_id))
     return session_cache[session_id]
@@ -223,7 +224,7 @@ def get_region_cidr_ranges():
         now = time()
         req = urllib.request.Request(url)
         r = urllib.request.urlopen(req).read()                               #nosec URL is *always* https://ip-ranges...
-        log.info(return_timing_object(service="AWS", endpoint=url, duration=(time() - now)))
+        log.info(return_timing_object(service="AWS", endpoint=url, duration=d(now)))
         region_list_json = loads(r.decode('utf-8'))
         region_list_cache = []
 
