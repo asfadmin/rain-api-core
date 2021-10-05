@@ -64,7 +64,7 @@ def retrieve_secret(secret_name):
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
-        log.info(return_timing_object(service="secretsmanager", endpoint="client.get_secret_value()", duration=(time() - timer)))
+        log.info(return_timing_object(service="secretsmanager", endpoint="client().get_secret_value()", duration=(time() - timer)))
     except ClientError as e:
         log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
         raise e
@@ -119,7 +119,7 @@ def read_s3(bucket: str, key: str, s3: ServiceResource=None):
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
     timer = time()
     body =  obj.get()['Body'].read().decode('utf-8')
-    log.info(return_timing_object(service="s3", endpoint="Object().get()", duration=(time() - timer)))
+    log.info(return_timing_object(service="s3", endpoint="resource().Object().get()", duration=(time() - timer)))
     return body
 
 
@@ -176,13 +176,13 @@ def get_role_creds(user_id: str='', in_region: bool=False):
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
-        log.info(return_timing_object(service="sts", endpoint="assume_role()", duration=(time() - now)))
+        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=(time() - now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
         # If the session has been active for more than 10 minutes, grab a new one.
         log.info("Replacing 10 minute old session for {0}".format(user_id))
         fresh_session = sts.assume_role(**session_params)
-        log.info(return_timing_object(service="sts", endpoint="assume_role()", duration=(time() - now)))
+        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=(time() - now)))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
     else:
         log.info("Reusing role credentials for {0}".format(user_id))
@@ -205,7 +205,7 @@ def get_role_session(creds=None, user_id=None):
                                         aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
                                         aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
                                         aws_session_token=sts_resp['Credentials']['SessionToken'])
-        log.info(return_timing_object(service="session", endpoint="boto3.session()", method="Instantiation", duration=(time() - now)))
+        log.info(return_timing_object(service="boto3", endpoint="boto3.session()", duration=(time() - now)))
     else:
         log.info("Reusing session {0}".format(session_id))
     return session_cache[session_id]
