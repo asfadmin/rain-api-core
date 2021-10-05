@@ -3,6 +3,11 @@ import os
 import sys
 import json
 
+def return_timing_object(**timing):
+    timing_object = { "service": "Unknown", "endpoint": "Unknown", "method": "GET", "duration": 0, "unit": "seconds"}
+    timing_object.update({k.lower(): v for k,v in timing.items()})
+    return {"timing":timing_object }
+    
 def reformat_for_json(msg):
     if type(msg) is dict:
         return json.dumps(msg).replace("'", '"')
