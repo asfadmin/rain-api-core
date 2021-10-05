@@ -2,11 +2,16 @@ import logging
 import os
 import sys
 import json
+import time
 
 def return_timing_object(**timing):
-    timing_object = { "service": "Unknown", "endpoint": "Unknown", "method": "GET", "duration": 0, "unit": "seconds"}
+    timing_object = { "service": "Unknown", "endpoint": "Unknown", "method": "GET", "duration": 0, "unit": "milliseconds"}
     timing_object.update({k.lower(): v for k,v in timing.items()})
     return {"timing":timing_object }
+    
+def d(time_in):
+    duration = time.time() - time_in
+    return(float("{:.2f}".format(duration*1000)))
     
 def reformat_for_json(msg):
     if type(msg) is dict:
