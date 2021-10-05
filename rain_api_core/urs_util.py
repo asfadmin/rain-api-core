@@ -5,7 +5,7 @@ import re
 import urllib
 from time import time
 from json import loads
-from rain_api_core.general_util import log_context, return_timing_object
+from rain_api_core.general_util import log_context, return_timing_object, d
 
 from .view_util import make_set_cookie_headers_jwt, get_exp_time, JWT_COOKIE_NAME
 from .aws_util import retrieve_secret
@@ -56,7 +56,7 @@ def do_auth(code, redirect_url, aux_headers={}):
         packet = response.read()
         log.debug('ET to do_auth() urlopen(): {} sec'.format(t1 - t0))
         log.debug('ET to do_auth() request to URS: {} sec'.format(time() - t0))
-        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=(time() - t0)))
+        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=d(t0)))
         return loads(packet)
 
     except urllib.error.URLError as e:
@@ -112,7 +112,7 @@ def get_profile(user_id, token, temptoken=False, aux_headers={}):
         timer = time()
         response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
         packet = response.read()
-        log.info(return_timing_object(service="EDL", endpoint=url, duration=(time() - timer)))
+        log.info(return_timing_object(service="EDL", endpoint=url, duration=d(timer)))
         user_profile = loads(packet)
 
         return user_profile
@@ -149,11 +149,11 @@ def get_new_token_and_profile(user_id, cookietoken, aux_headers={}):
         response = urllib.request.urlopen(post_request)                              #nosec URL is *always* URS.
         t1 = time()
         packet = response.read()
+        log.info(return_timing_object(service="EDL", endpoint=url, duration=d(t0)))
         new_token = loads(packet)['access_token']
         t2 = time()
         log.info("Retrieved new token: {0}".format(new_token))
         log.debug('ET for get_new_token_and_profile() urlopen() {} sec'.format(t1 - t0))
-        log.info(return_timing_object(service="EDL", endpoint=url, duration=(t2 - t0)))
         log.debug('ET for get_new_token_and_profile() response.read() and loads() {} sec'.format(t2- t1))
         # Get user profile with new token
         return get_profile(user_id, cookietoken, new_token, aux_headers=aux_headers)
