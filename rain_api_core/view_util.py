@@ -9,8 +9,11 @@ from wsgiref.handlers import format_date_time as format_7231_date
 from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
 from time import time
 
-from .aws_util import retrieve_secret
-from rain_api_core.general_util import return_timing_object, d 
+from rain_api_core.aws_util import retrieve_secret
+from rain_api_core.general_util import return_timing_object, duration
+
+# This warning is stupid
+# pylint: disable=logging-fstring-interpolation
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +30,7 @@ JWT_BLACKLIST = {}
 
 
 def get_jwt_keys():
-    global JWT_KEYS
+    global JWT_KEYS # pylint: disable=global-statement
 
     if JWT_KEYS:
         # Cached
@@ -62,7 +65,7 @@ def cache_html_templates():
     try:
         timer = time()
         result = client.list_objects(Bucket=bucket, Prefix=templatedir, Delimiter='/')
-        log.info(return_timing_object(service="s3", endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)", duration=d(timer)))
+        log.info(return_timing_object(service="s3", endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)", duration=duration(timer)))
 
         for o in result.get('Contents'):
             filename = os.path.basename(o['Key'])
@@ -70,7 +73,7 @@ def cache_html_templates():
                 log.debug('attempting to save {}'.format(os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename)))
                 timer = time()
                 client.download_file(bucket, o['Key'], os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename))
-                log.info(return_timing_object(service="s3", endpoint=f"client().download_file(s3://{bucket}/{o['Key']})", duration=d(timer)))
+                log.info(return_timing_object(service="s3", endpoint=f"client().download_file(s3://{bucket}/{o['Key']})", duration=duration(timer)))
         return 'CACHED'
     except (TypeError, KeyError) as e:
         log.error(e)
@@ -177,7 +180,7 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         except Exception as e:
             log.debug(f"Received the following error while checking the given JWT against the blacklist: {e}")
     else:
-        log.debug(f'No environment variable "BLACKLIST_ENDPOINT"')
+        log.debug('No environment variable "BLACKLIST_ENDPOINT"')
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
@@ -232,7 +235,7 @@ def set_jwt_blacklist():
     # Bandit complains with B310 on the line below. We know the URL, this is safe!
     timer = time()
     output = urllib.request.urlopen(endpoint).read().decode('utf-8')  # nosec
-    log.info(return_timing_object(service="blacklist", endpoint=endpoint, duration=d(timer)))
+    log.info(return_timing_object(service="blacklist", endpoint=endpoint, duration=duration(timer)))
     blacklist = json.loads(output)["blacklist"]
 
     contents = {
