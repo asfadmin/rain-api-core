@@ -122,9 +122,9 @@ def get_profile(user_id, token, temptoken=False, aux_headers=None):
         if not temptoken: # This keeps get_new_token_and_profile() from calling this over and over
             log.debug('because error above, going to get_new_token_and_profile()')
             return get_new_token_and_profile(user_id, token, aux_headers)
-        else:
-            log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
-            return {}
+
+        log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
+    return {}
 
 
 def get_new_token_and_profile(user_id, cookietoken, aux_headers=None):
@@ -189,14 +189,13 @@ def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh
         log.info("User {0} belongs to private group".format(user_id))
         return True, new_profile
 
-    else:
-        # Couldn't find user in provided groups, but we may as well look at a fresh group list:
-        if not refresh_first:
-            # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
-            log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
+    # Couldn't find user in provided groups, but we may as well look at a fresh group list:
+    if not refresh_first:
+        # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
+        log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
 
-            return user_in_group_urs(private_groups, user_id, {}, refresh_first=True, aux_headers=aux_headers)
-        log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
+        return user_in_group_urs(private_groups, user_id, {}, refresh_first=True, aux_headers=aux_headers)
+    log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
 
     return False, new_profile
 
