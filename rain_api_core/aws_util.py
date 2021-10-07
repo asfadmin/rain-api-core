@@ -12,6 +12,8 @@ from boto3.resources.base import ServiceResource
 from botocore.config import Config as bc_Config
 from botocore.exceptions import ClientError
 
+from rain_api_core.general_util import return_timing_object, duration
+
 log = logging.getLogger(__name__)
 sts = botoclient('sts')
 secret_cache = {}
@@ -58,9 +60,11 @@ def retrieve_secret(secret_name):
     # We rethrow the exception by default.
 
     try:
+        timer = time()
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
+        log.info(return_timing_object(service="secretsmanager", endpoint=f"client().get_secret_value({secret_name})", duration=duration(timer)))
     except ClientError as e:
         log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
         raise e
@@ -89,6 +93,7 @@ def get_s3_resource():
         if os.getenv('S3_SIGNATURE_VERSION'):
             params['config'] = bc_Config(signature_version=os.getenv('S3_SIGNATURE_VERSION'))
         s3_resource = botoresource('s3', **params)
+
     return s3_resource
 
 
@@ -111,10 +116,13 @@ def read_s3(bucket: str, key: str, s3: ServiceResource=None):
     log.info("Downloading config file {0} from s3://{1}...".format(key, bucket))
     obj = s3.Object(bucket, key)
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
-    return obj.get()['Body'].read().decode('utf-8')
+    timer = time()
+    body =  obj.get()['Body'].read().decode('utf-8')
+    log.info(return_timing_object(service="s3", endpoint=f"resource().Object(s3://{bucket}/{key}).get()", duration=duration(timer)))
+    return body
 
 
-def get_yaml(bucket: str, file_name: str, s3: ServiceResource=None):
+def get_yaml(bucket: str, file_name: str):
     """
     Loads the YAML from a given bucket/filename
     :param bucket: bucket name
@@ -129,20 +137,20 @@ def get_yaml(bucket: str, file_name: str, s3: ServiceResource=None):
         raise
 
 
-def get_yaml_file(bucket, key, s3: ServiceResource=None):
+def get_yaml_file(bucket, key):
 
     if not key:
         # No file was provided, send empty dict
         return {}
     try:
         log.info("Attempting to download yaml s3://{0}/{1}".format(bucket, key))
-        optional_file = get_yaml(bucket, key, s3)
+        optional_file = get_yaml(bucket, key)
         return optional_file
     except ClientError as e:
         # The specified file did not exist
         log.error("Could not download yaml @ s3://{0}/{1}: {2}".format(bucket, key, e))
         sys.exit()
-    
+
 def get_role_creds(user_id: str='', in_region: bool=False):
     """
     :param user_id: string with URS username
@@ -158,41 +166,46 @@ def get_role_creds(user_id: str='', in_region: bool=False):
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_INREGION_ARN')
     else:
         download_role_arn = os.getenv('EGRESS_APP_DOWNLOAD_ROLE_ARN')
-        
+    dl_arn_name=download_role_arn.split("/")[-1]
+
     # chained role assumption like this CANNOT currently be extended past 1 Hour.
     # https://aws.amazon.com/premiumsupport/knowledge-center/iam-role-chaining-limit/
     now = time()
     session_params = {"RoleArn": download_role_arn, "RoleSessionName": f"{user_id}@{round(now)}", "DurationSeconds": 3600 }
-    session_offset = 0 
+    session_offset = 0
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
-        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
+        log.info(return_timing_object(service="sts", endpoint=f"client().assume_role({dl_arn_name}/{user_id})", duration=duration(now)))
+        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now }
     elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
         # If the session has been active for more than 10 minutes, grab a new one.
         log.info("Replacing 10 minute old session for {0}".format(user_id))
         fresh_session = sts.assume_role(**session_params)
-        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now } 
+        log.info(return_timing_object(service="sts", endpoint="client().assume_role()", duration=duration(now)))
+        role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now }
     else:
         log.info("Reusing role credentials for {0}".format(user_id))
         session_offset = round( now - role_creds_cache[download_role_arn][user_id]["timestamp"] )
 
-    log.debug(f'assuming role: {download_role_arn}, role session username: {user_id}')
+    log.debug(f'assuming role: {0}, role session username: {1}'.format(download_role_arn,user_id))
     return role_creds_cache[download_role_arn][user_id]["session"], session_offset
 
 
 def get_role_session(creds=None, user_id=None):
-    
+
     global session_cache                                                                    #pylint: disable=global-statement
     sts_resp = creds if creds else get_role_creds(user_id)[0]
-    log.debug('sts_resp: {}'.format(sts_resp))
-    
+    log.debug('sts_resp: {0}'.format(sts_resp))
+
     session_id = sts_resp['AssumedRoleUser']['AssumedRoleId']
     if session_id not in session_cache:
+        now = time()
         session_cache[session_id] = boto_Session(
                                         aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
                                         aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
                                         aws_session_token=sts_resp['Credentials']['SessionToken'])
+        log.info(return_timing_object(service="boto3", endpoint="boto3.session()", duration=duration(now)))
     else:
         log.info("Reusing session {0}".format(session_id))
     return session_cache[session_id]
@@ -207,9 +220,10 @@ def get_region_cidr_ranges():
 
     if not region_list_cache:                                                    #pylint: disable=used-before-assignment
         url = 'https://ip-ranges.amazonaws.com/ip-ranges.json'
+        now = time()
         req = urllib.request.Request(url)
         r = urllib.request.urlopen(req).read()                               #nosec URL is *always* https://ip-ranges...
-
+        log.info(return_timing_object(service="AWS", endpoint=url, duration=duration(now)))
         region_list_json = loads(r.decode('utf-8'))
         region_list_cache = []
 

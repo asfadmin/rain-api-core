@@ -1,14 +1,12 @@
 
 import logging
 import os
-import re
 import urllib
 from time import time
 from json import loads
-from rain_api_core.general_util import log_context
-
-from .view_util import make_set_cookie_headers_jwt, get_exp_time, JWT_COOKIE_NAME
-from .aws_util import retrieve_secret
+from rain_api_core.general_util import log_context, return_timing_object, duration
+from rain_api_core.view_util import make_set_cookie_headers_jwt, get_exp_time, JWT_COOKIE_NAME
+from rain_api_core.aws_util import retrieve_secret
 
 
 log = logging.getLogger(__name__)
@@ -28,8 +26,8 @@ def get_redirect_url(ctxt=False):
     return '{}login'.format(get_base_url(ctxt))
 
 
-def do_auth(code, redirect_url):
-
+def do_auth(code, redirect_url, aux_headers=None):
+    aux_headers = aux_headers or {} # A safer default
     url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
 
     # App U:P from URS Application
@@ -40,6 +38,8 @@ def do_auth(code, redirect_url):
                  "redirect_uri": redirect_url}
 
     headers = {"Authorization": "Basic " + auth}
+    headers.update(aux_headers)
+
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
@@ -54,6 +54,7 @@ def do_auth(code, redirect_url):
         packet = response.read()
         log.debug('ET to do_auth() urlopen(): {} sec'.format(t1 - t0))
         log.debug('ET to do_auth() request to URS: {} sec'.format(time() - t0))
+        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=duration(t0)))
         return loads(packet)
 
     except urllib.error.URLError as e:
@@ -69,7 +70,7 @@ def get_urs_url(ctxt, to=False):
     # From URS Application
     client_id = get_urs_creds()['UrsId']
 
-    log.debug('domain name: %s' % os.getenv('DOMAIN_NAME', 'no domainname set'))
+    log.debug('domain name: {0}'.format(os.getenv('DOMAIN_NAME', 'no domainname set')))
     log.debug('if no domain name set: {}.execute-api.{}.amazonaws.com/{}'.format(ctxt['apiId'], os.getenv('AWS_DEFAULT_REGION', '<region>'), ctxt['stage']))
 
     urs_url = '{0}?client_id={1}&response_type=code&redirect_uri={2}'.format(base_url, client_id, get_redirect_url(ctxt))
@@ -89,7 +90,9 @@ def get_urs_url(ctxt, to=False):
     return urs_url
 
 
-def get_profile(user_id, token, temptoken=False):
+def get_profile(user_id, token, temptoken=False, aux_headers=None):
+    aux_headers = aux_headers or {} # Safer Default
+
     if not user_id or not token:
         return {}
 
@@ -102,13 +105,14 @@ def get_profile(user_id, token, temptoken=False):
 
     url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/api/users/{0}".format(user_id)
     headers = {"Authorization": "Bearer " + headertoken}
+    headers.update(aux_headers)
     req = urllib.request.Request(url, None, headers)
 
     try:
-
+        timer = time()
         response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
         packet = response.read()
-
+        log.info(return_timing_object(service="EDL", endpoint=url, duration=duration(timer)))
         user_profile = loads(packet)
 
         return user_profile
@@ -117,13 +121,14 @@ def get_profile(user_id, token, temptoken=False):
         log.warning("Error fetching profile: {0}".format(e))
         if not temptoken: # This keeps get_new_token_and_profile() from calling this over and over
             log.debug('because error above, going to get_new_token_and_profile()')
-            return get_new_token_and_profile(user_id, token)
-        else:
-            log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
-            return {}
+            return get_new_token_and_profile(user_id, token, aux_headers)
+
+        log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
+    return {}
 
 
-def get_new_token_and_profile(user_id, cookietoken):
+def get_new_token_and_profile(user_id, cookietoken, aux_headers=None):
+    aux_headers = aux_headers or {} # A safer default    
 
     # get a new token
     url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
@@ -132,6 +137,7 @@ def get_new_token_and_profile(user_id, cookietoken):
     auth = get_urs_creds()['UrsAuth']
     post_data = {"grant_type": "client_credentials" }
     headers = {"Authorization": "Basic " + auth}
+    headers.update(aux_headers)
 
     # Download token
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
@@ -144,13 +150,14 @@ def get_new_token_and_profile(user_id, cookietoken):
         response = urllib.request.urlopen(post_request)                              #nosec URL is *always* URS.
         t1 = time()
         packet = response.read()
+        log.info(return_timing_object(service="EDL", endpoint=url, duration=duration(t0)))
         new_token = loads(packet)['access_token']
         t2 = time()
         log.info("Retrieved new token: {0}".format(new_token))
         log.debug('ET for get_new_token_and_profile() urlopen() {} sec'.format(t1 - t0))
         log.debug('ET for get_new_token_and_profile() response.read() and loads() {} sec'.format(t2- t1))
         # Get user profile with new token
-        return get_profile(user_id, cookietoken, new_token)
+        return get_profile(user_id, cookietoken, new_token, aux_headers=aux_headers)
 
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
@@ -170,31 +177,31 @@ def user_in_group_list(private_groups, user_groups):
                     return True
 
 
-def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh_first=False):
-
+def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh_first=False, aux_headers=None):
+    aux_headers = aux_headers or {} # A safer default
     new_profile = {}
 
     if refresh_first or not user_profile:
-        user_profile = get_profile(user_id, token)
+        user_profile = get_profile(user_id, token, aux_headers=aux_headers)
         new_profile = user_profile
 
     if isinstance(user_profile, dict) and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
         log.info("User {0} belongs to private group".format(user_id))
         return True, new_profile
 
-    else:
-        # Couldn't find user in provided groups, but we may as well look at a fresh group list:
-        if not refresh_first:
-            # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
-            log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
+    # Couldn't find user in provided groups, but we may as well look at a fresh group list:
+    if not refresh_first:
+        # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
+        log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
 
-            return user_in_group_urs(private_groups, user_id, {}, refresh_first=True)
-        log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
+        return user_in_group_urs(private_groups, user_id, {}, refresh_first=True, aux_headers=aux_headers)
+    log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
 
     return False, new_profile
 
 
-def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=False):
+def user_in_group(private_groups, cookievars, refresh_first=False, aux_headers=None):
+    aux_headers = aux_headers or {} # A safer default
 
     # If a new profile is fetched, it is assigned to this var, and returned so that a fresh jwt cookie can be set.
     new_profile = {}
@@ -202,30 +209,25 @@ def user_in_group(private_groups, cookievars, user_profile=None, refresh_first=F
     if not private_groups:
         return False, new_profile
 
-    try:
-        jwt_payload = cookievars[JWT_COOKIE_NAME]
+    jwt_payload = cookievars.get(JWT_COOKIE_NAME)
 
-    except (KeyError, IndexError) as e:
-        log.error('JWT cookie not present. ')
-
+    if not jwt_payload:
         return False, new_profile
 
-    else:
-        if refresh_first:
-            new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])
-            jwt_payload['urs-groups'] = new_profile['user_groups']
-            # TODO: reset fresh group-membership JWT cookie now? Somehow?
+    if refresh_first:
+        new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'], aux_headers=aux_headers)
+        jwt_payload['urs-groups'] = new_profile['user_groups']
 
-        in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
-        if in_group:
-            return True, new_profile
-        elif not in_group and not refresh_first:
-            # TODO: look at ['iat'] and if cookie is recent enough (how recent?), don't bother doing this.
-            # one last ditch effort to see if they were so very recently added to group:
-            jwt_payload['urs-groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'])['user_groups']
-            return user_in_group(private_groups, cookievars, {}, refresh_first=True)
-        else:
-            return False, new_profile
+    in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
+    if in_group:
+        return True, new_profile
+
+    if not in_group and not refresh_first:
+        # one last ditch effort to see if they were so very recently added to group:
+        jwt_payload['urs-groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'], aux_headers=aux_headers)['user_groups']
+        return user_in_group(private_groups, cookievars, refresh_first=True, aux_headers=aux_headers)
+
+    return False, new_profile
 
 
 def get_urs_creds():
@@ -265,7 +267,8 @@ def user_profile_2_jwt_payload(user_id, access_token, user_profile):
 
 
 # This do_login() is mainly for chalice clients.
-def do_login(args, context, cookie_domain=''):
+def do_login(args, context, cookie_domain='', aux_headers=None):
+    aux_headers = aux_headers or {} # A safer default
 
     log.debug('the query_params: {}'.format(args))
 
@@ -296,7 +299,7 @@ def do_login(args, context, cookie_domain=''):
 
     log.debug('pre-do_auth() query params: {}'.format(args))
     redir_url = get_redirect_url(context)
-    auth = do_auth(args.get('code', ''), redir_url)
+    auth = do_auth(args.get('code', ''), redir_url, aux_headers=aux_headers)
     log.debug('auth: {}'.format(auth))
     if not auth:
         log.debug('no auth returned from do_auth()')
@@ -308,7 +311,7 @@ def do_login(args, context, cookie_domain=''):
     user_id = auth['endpoint'].split('/')[-1]
     log_context(user_id=user_id)
 
-    user_profile = get_profile(user_id, auth['access_token'])
+    user_profile = get_profile(user_id, auth['access_token'], aux_headers={})
     log.debug('Got the user profile: {}'.format(user_profile))
     if user_profile:
         log.debug('urs-access-token: {}'.format(auth['access_token']))

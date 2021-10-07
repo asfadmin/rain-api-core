@@ -7,6 +7,8 @@ from datetime import datetime
 
 log = logging.getLogger(__name__)
 
+# This warning is stupid
+# pylint: disable=logging-fstring-interpolation
 
 def prepend_bucketname(name):
 
@@ -122,7 +124,7 @@ def process_varargs(varargs: list, b_map: dict):
     :return: path, bucket, object_name
     """
     log.warning('Deprecated process_varargs() called.')
-    path, bucket, object_name, headers = process_request(varargs, b_map)
+    path, bucket, object_name, _ = process_request(varargs, b_map)
     return path, bucket, object_name
 
 
@@ -163,13 +165,13 @@ def get_sorted_bucket_list(b_map, bucket_group):
         # But why?!
         log.warning(f"Bucket map does not contain bucket group '{bucket_group}'")
         return []
-    
+
     # b_map[bucket_group] SHOULD be a dict, but list actually works too.
     if  isinstance(b_map[bucket_group], dict):
         return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True )
     if isinstance(b_map[bucket_group], list):
         return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True )
-    
+
     # Something went wrong.
     return []
 
