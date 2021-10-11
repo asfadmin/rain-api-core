@@ -3,6 +3,28 @@ import os
 import sys
 import json
 import time
+import re
+
+UNCENSORED_LOGGING = os.getenv("UNCENSORED_LOGGING")
+
+LOG_CENSOR = [
+        { "regex": r"(eyJ0e[A-Za-z0-9-_]{10})[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*([A-Za-z0-9-_]{10})",
+          "replace": "\\g<1>XXX<JWTTOKEN>XXX\\g<2>",
+          "description": "X-out JWT Token payload"
+        },
+        { "regex": r"(EDL-[A-Za-z0-9]+)[A-Za-z0-9]{40}([A-Za-z0-9]{10})",
+          "replace": "\\g<1>XXX<EDLTOKEN>XXX\\g<2>",
+          "description": "X-out non-JWT EDL token"
+        },
+        { "regex": r"(Basic [A-Za-z0-9-_]{5})[A-Za-z0-9]*([A-Za-z0-9-_]{5})",
+          "replace": "\\g<1>XXX<BASICAUTH>XXX\\g<2>",
+          "description": "X-out Basic Auth Credentials"
+        },
+        { "regex": r"([^A-Za-z0-9/+=][A-Za-z0-9/+=]{5})[A-Za-z0-9/+=]{30}([A-Za-z0-9/+=]{5}[^A-Za-z0-9/+=])",
+          "replace": "\\g<1>XXX<AWSSECRET>XXX\\g<2>",
+          "description": "X-out AWS Secret"
+        }
+    ]
 
 def return_timing_object(**timing):
     timing_object = { "service": "Unknown", "endpoint": "Unknown", "method": "GET", "duration": 0, "unit": "milliseconds"}
@@ -13,6 +35,18 @@ def duration(time_in):
     # Return the time duration in milliseconds
     delta = time.time() - time_in
     return(float("{:.2f}".format(delta*1000)))
+    
+def filter_log_credentials(msg):
+    if UNCENSORED_LOGGING:
+        return msg
+    
+    for regex in LOG_CENSOR:
+        result = re.sub(regex["regex"], regex["replace"], msg, 0, re.MULTILINE)
+        if result:
+            msg = str(result)
+        
+    return msg
+    
 
 def reformat_for_json(msg):
     if type(msg) is dict:
@@ -39,7 +73,7 @@ class CustomLogFilter(logging.Filter):
                       }
 
     def filter(self, record):
-        record.msg = reformat_for_json(record.msg)
+        record.msg = filter_log_credentials(reformat_for_json(record.msg))
         record.build_vers = self.params['build_vers']
         record.maturity = self.params['maturity']
         record.request_id = self.params['request_id']

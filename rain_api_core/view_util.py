@@ -60,10 +60,10 @@ def cache_html_templates():
     templatedir = os.getenv('HTML_TEMPLATE_DIR')
     if not templatedir[-1] == '/':  # we need a trailing slash
         templatedir = '{}/'.format(templatedir)
-
+    
+    timer = time()
     client = botoclient('s3')
     try:
-        timer = time()
         result = client.list_objects(Bucket=bucket, Prefix=templatedir, Delimiter='/')
         log.info(return_timing_object(service="s3", endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)", duration=duration(timer)))
 
@@ -150,7 +150,9 @@ def get_cookies(hdrs: dict):
 def make_jwt_payload(payload, algo=JWT_ALGO):
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
+        timer = time()
         encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
+        log.info(return_timing_object(service="jwt", endpoint="jwt.encode()", duration=duration(timer)))
         return encoded
     except IndexError as e:
         log.error('jwt_keys may be malformed: ')
@@ -163,7 +165,10 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
 
 def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     try:
-        cookiedecoded = jwt.decode(jwt_payload, get_jwt_keys()['rsa_pub_key'], algo)
+        rsa_pub_key = get_jwt_keys()['rsa_pub_key']
+        timer = time()
+        cookiedecoded = jwt.decode(jwt_payload, rsa_pub_key, algo)
+        log.info(return_timing_object(service="jwt", endpoint="jwt.decode()", duration=duration(timer)))
     except jwt.ExpiredSignatureError as e:
         # Signature has expired
         log.info('JWT has expired')
@@ -180,7 +185,7 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
         except Exception as e:
             log.debug(f"Received the following error while checking the given JWT against the blacklist: {e}")
     else:
-        log.debug('No environment variable "BLACKLIST_ENDPOINT"')
+        log.debug('No environment variable BLACKLIST_ENDPOINT')
 
     log.debug('cookiedecoded {}'.format(cookiedecoded))
     return cookiedecoded
