@@ -1,5 +1,5 @@
 jinja2==3.0.2
-PyYAML==5.4.1
+PyYAML==6.0
 aws-requests-auth==0.4.3
 cryptography==3.4.8
 chalice==1.26.2
