@@ -1,4 +1,9 @@
-
-.DS_Store
+# Python
 *.pyc
+.venv
+
+# IDE
 .idea
+
+# OS
+.DS_Store

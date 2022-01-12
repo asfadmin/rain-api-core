@@ -1,9 +1,9 @@
+import json
 import logging
 import os
-import sys
-import json
-import time
 import re
+import sys
+import time
 
 UNCENSORED_LOGGING = os.getenv("UNCENSORED_LOGGING")
 
@@ -35,30 +35,31 @@ def duration(time_in):
     # Return the time duration in milliseconds
     delta = time.time() - time_in
     return(float("{:.2f}".format(delta*1000)))
-    
+
 def filter_log_credentials(msg):
     if UNCENSORED_LOGGING:
         return msg
-    
+
     for regex in LOG_CENSOR:
         result = re.sub(regex["regex"], regex["replace"], msg, 0, re.MULTILINE)
         if result:
             msg = str(result)
-        
+
     return msg
-    
+
 
 def reformat_for_json(msg):
     if type(msg) is dict:
         return json.dumps(msg).replace("'", '"')
-    if '{' in msg:
+    if isinstance(msg, str) and '{' in msg:
         try:
             json_obj = json.loads(msg)
             return json.dumps(json_obj).replace("'", '"')
         except json.decoder.JSONDecodeError:
             # Not JSON.
             pass
-    return '"{0}"'.format(msg)
+    return str(msg)
+
 
 class CustomLogFilter(logging.Filter):
 
@@ -85,6 +86,7 @@ class CustomLogFilter(logging.Filter):
     def update(self, **context):
         for key in context:
             self.params.update({key: context[key]})
+
 
 custom_log_filter = CustomLogFilter()
 
