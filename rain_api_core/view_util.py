@@ -1,16 +1,18 @@
+import base64
+import json
 import logging
 import os
-import jwt
-import json
-import base64
 import urllib
-from boto3 import client as botoclient
-from wsgiref.handlers import format_date_time as format_7231_date
-from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateNotFound
+from pathlib import Path
 from time import time
+from wsgiref.handlers import format_date_time as format_7231_date
+
+import jwt
+from boto3 import client as botoclient
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
 from rain_api_core.aws_util import retrieve_secret
-from rain_api_core.general_util import return_timing_object, duration
+from rain_api_core.general_util import duration, return_timing_object
 
 # This warning is stupid
 # pylint: disable=logging-fstring-interpolation
@@ -19,6 +21,7 @@ log = logging.getLogger(__name__)
 
 HTML_TEMPLATE_STATUS = ''
 HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'  # nosec We want to leverage instance persistance
+HTML_TEMPLATE_PROJECT_DIR = Path().resolve() / 'templates'
 
 SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 
@@ -60,7 +63,7 @@ def cache_html_templates():
     templatedir = os.getenv('HTML_TEMPLATE_DIR')
     if not templatedir[-1] == '/':  # we need a trailing slash
         templatedir = '{}/'.format(templatedir)
-    
+
     timer = time()
     client = botoclient('s3')
     try:
@@ -88,8 +91,12 @@ def get_html_body(template_vars: dict, templatefile: str = 'root.html'):
         HTML_TEMPLATE_STATUS = cache_html_templates()
 
     jin_env = Environment(
-        loader=FileSystemLoader(
-            [HTML_TEMPLATE_LOCAL_CACHEDIR, os.path.join(os.path.dirname(__file__), '../', "templates")]),
+        loader=FileSystemLoader([
+            HTML_TEMPLATE_LOCAL_CACHEDIR,
+            HTML_TEMPLATE_PROJECT_DIR,
+            # For legacy compatibility with projects that don't install this module with pip and rely on this behavior
+            os.path.join(os.path.dirname(__file__), '../', "templates")
+        ]),
         autoescape=select_autoescape(['html', 'xml'])
     )
     try:
