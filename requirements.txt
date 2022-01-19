@@ -1,5 +1,5 @@
 aws-requests-auth==0.4.3
-chalice==1.26.2
+chalice==1.26.5
 cryptography==35.0.0
 jinja2==3.0.2
 jwcrypto==1.0
