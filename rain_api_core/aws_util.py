@@ -149,6 +149,7 @@ def get_yaml_file(bucket, key):
     except ClientError as e:
         # The specified file did not exist
         log.error("Could not download yaml @ s3://{0}/{1}: {2}".format(bucket, key, e))
+        # TODO(reweeden): remove this, why is this here!!!?
         sys.exit()
 
 def get_role_creds(user_id: str='', in_region: bool=False):

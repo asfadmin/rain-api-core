@@ -161,6 +161,8 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
         encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
         log.info(return_timing_object(service="jwt", endpoint="jwt.encode()", duration=duration(timer)))
         return encoded
+        # TODO(reweeden): how can these error types possibly be triggered!? jwt.encode will raise a TypeError on bad
+        # input, but never ValueError or AttributeError. There is also no code here that will raise IndexError
     except IndexError as e:
         log.error('jwt_keys may be malformed: ')
         log.error(e)
@@ -190,6 +192,7 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
             if is_jwt_blacklisted(cookiedecoded):
                 return {}
         except Exception as e:
+            # TODO(reweeden): This error handling should be moved into `is_jwt_blacklisted` and/or `set_jwt_blacklist`
             log.debug(f"Received the following error while checking the given JWT against the blacklist: {e}")
     else:
         log.debug('No environment variable BLACKLIST_ENDPOINT')

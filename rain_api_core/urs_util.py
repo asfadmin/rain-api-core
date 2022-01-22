@@ -18,6 +18,7 @@ def get_base_url(ctxt=False):
         return 'https://{}/'.format(
             os.getenv('DOMAIN_NAME', '{}/{}'.format(ctxt['domainName'], ctxt['stage'])))
     except (TypeError, IndexError) as e:
+        # TODO(reweeden): Should `IndexError` actually be `KeyError`?
         log.error('could not create a redirect_url, because {}'.format(e))
         raise
 
@@ -57,6 +58,7 @@ def do_auth(code, redirect_url, aux_headers=None):
         log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=duration(t0)))
         return loads(packet)
 
+        # TODO(reweeden): can there be other errors such as HTTPError?
     except urllib.error.URLError as e:
         log.error("Error fetching auth: {0}".format(e))
         log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))

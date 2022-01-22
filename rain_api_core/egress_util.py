@@ -112,6 +112,7 @@ def get_bucket_dynamic_path(path_list, b_map):
             log.debug('said bucketmap: {}'.format(map_dict))
             return False, False, False, {}
 
+    # TODO(reweeden): Return `None` instead of `False`
     # what? No path?
     return False, False, False, {}
 
