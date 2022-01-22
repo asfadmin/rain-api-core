@@ -261,7 +261,6 @@ def test_user_profile_2_jwt_payload(mock_get_exp_time, mock_time):
     }
 
     assert user_profile_2_jwt_payload("user_id", "access_token", user_profile) == {
-        # Do we want more items in here?
         "first_name": "First",
         "last_name": "Last",
         "email": "email@domain.com",

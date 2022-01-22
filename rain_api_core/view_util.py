@@ -1,8 +1,11 @@
 import base64
+import contextlib
+import functools
 import json
 import logging
 import os
 import urllib
+from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from time import time
 from wsgiref.handlers import format_date_time as format_7231_date
@@ -23,46 +26,39 @@ HTML_TEMPLATE_STATUS = ''
 HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'  # nosec We want to leverage instance persistance
 HTML_TEMPLATE_PROJECT_DIR = Path().resolve() / 'templates'
 
+# TODO(reweeden): explain what is going on here
 SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
 
 JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
-JWT_KEYS = {}
 JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
 
 JWT_BLACKLIST = {}
 
 
+@functools.lru_cache(maxsize=None)
 def get_jwt_keys():
-    global JWT_KEYS # pylint: disable=global-statement
-
-    if JWT_KEYS:
-        # Cached
-        return JWT_KEYS
     raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
 
-    return_dict = {}
-
-    for k in raw_keys:
-        return_dict[k] = base64.b64decode(raw_keys[k].encode('utf-8'))
-
-    JWT_KEYS = return_dict  # Cache it
-    return return_dict
+    return {
+        k: base64.b64decode(v.encode('utf-8'))
+        for k, v in raw_keys.items()
+    }
 
 
-def cache_html_templates():
+def cache_html_templates() -> str:
     try:
         os.mkdir(HTML_TEMPLATE_LOCAL_CACHEDIR, 0o700)
     except FileExistsError:
         # good.
         log.debug('somehow, {} exists already'.format(HTML_TEMPLATE_LOCAL_CACHEDIR))
 
-    if os.getenv('HTML_TEMPLATE_DIR', '') == '':
+    templatedir = os.getenv('HTML_TEMPLATE_DIR')
+    if not templatedir:
         return 'DEFAULT'
 
     bucket = os.getenv('CONFIG_BUCKET')
-    templatedir = os.getenv('HTML_TEMPLATE_DIR')
-    if not templatedir[-1] == '/':  # we need a trailing slash
-        templatedir = '{}/'.format(templatedir)
+    if not templatedir.endswith('/'):  # we need a trailing slash
+        templatedir = f'{templatedir}/'
 
     timer = time()
     client = botoclient('s3')
@@ -84,7 +80,7 @@ def cache_html_templates():
         return 'ERROR'
 
 
-def get_html_body(template_vars: dict, templatefile: str = 'root.html'):
+def get_html_body(template_vars: dict, templatefile: str = 'root.html') -> str:
     global HTML_TEMPLATE_STATUS  # pylint: disable=global-statement
 
     if HTML_TEMPLATE_STATUS == '':
@@ -100,13 +96,12 @@ def get_html_body(template_vars: dict, templatefile: str = 'root.html'):
         autoescape=select_autoescape(['html', 'xml'])
     )
     try:
-        jin_tmp = jin_env.get_template(templatefile)
-
+        template = jin_env.get_template(templatefile)
     except TemplateNotFound as e:
         log.error('Template not found: {}'.format(e))
         return 'Cannot find the HTML template directory'
 
-    return jin_tmp.render(**template_vars)
+    return template.render(**template_vars)
 
 
 def get_cookie_vars(headers: dict):
@@ -117,19 +112,16 @@ def get_cookie_vars(headers: dict):
     :type: dict
     """
     cooks = get_cookies(headers)
-    # log.debug('cooks: {}'.format(cooks))
-    cookie_vars = {}
     try:
         if JWT_COOKIE_NAME in cooks:
             decoded_payload = decode_jwt_payload(cooks[JWT_COOKIE_NAME], JWT_ALGO)
-            cookie_vars.update({JWT_COOKIE_NAME: decoded_payload})
+            return {JWT_COOKIE_NAME: decoded_payload}
         else:
             log.debug('could not find jwt cookie in get_cookie_vars()')
-            cookie_vars = {}
     except KeyError as e:
         log.debug('Key error trying to get cookie vars: {}'.format(e))
-        cookie_vars = {}
-    return cookie_vars
+
+    return {}
 
 
 def get_exp_time():
@@ -141,17 +133,18 @@ def get_cookie_expiration_date_str():
 
 
 def get_cookies(hdrs: dict):
-    cookies = {}
-    pre_cookies = []
-    c = hdrs.get('cookie', hdrs.get('Cookie', hdrs.get('COOKIE', None)))
-    if c:
-        pre_cookies = c.split(';')
-        for cook in pre_cookies:
-            # print('x: {}'.format(cook))
-            splitcook = cook.split('=')
-            cookies.update({splitcook[0].strip(): splitcook[1].strip()})
+    cookie_string = hdrs.get('cookie') or hdrs.get('Cookie') or hdrs.get('COOKIE')
+    if not cookie_string:
+        return {}
 
-    return cookies
+    cookie = SimpleCookie()
+    with contextlib.suppress(CookieError):
+        cookie.load(cookie_string)
+
+    return {
+        key: morsel.value
+        for key, morsel in cookie.items()
+    }
 
 
 def make_jwt_payload(payload, algo=JWT_ALGO):
@@ -176,14 +169,14 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     try:
         rsa_pub_key = get_jwt_keys()['rsa_pub_key']
         timer = time()
-        cookiedecoded = jwt.decode(jwt_payload, rsa_pub_key, algo)
+        cookiedecoded = jwt.decode(jwt_payload, rsa_pub_key, [algo])
         log.info(return_timing_object(service="jwt", endpoint="jwt.decode()", duration=duration(timer)))
-    except jwt.ExpiredSignatureError as e:
+    except jwt.ExpiredSignatureError:
         # Signature has expired
         log.info('JWT has expired')
         # TODO what more to do with this, if anything?
         return {}
-    except jwt.InvalidSignatureError as e:
+    except jwt.InvalidSignatureError:
         log.info('JWT has failed verification. returning empty dict')
         return {}
 
@@ -203,7 +196,7 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
 
 def craft_cookie_domain_payloadpiece(cookie_domain):
     if cookie_domain:
-        return '; Domain={}'.format(cookie_domain)
+        return f'; Domain={cookie_domain}'
 
     return ''
 
@@ -214,20 +207,18 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
 
     if not expdate:
         expdate = get_cookie_expiration_date_str()
-    headers = {'SET-COOKIE': '{}={}; Expires={}; Path=/{}'.format(JWT_COOKIE_NAME,
-                                                                  jwt_payload,
-                                                                  expdate,
-                                                                  cookie_domain_payloadpiece)}
+    headers = {'SET-COOKIE': f'{JWT_COOKIE_NAME}={jwt_payload}; Expires={expdate}; Path=/{cookie_domain_payloadpiece}'}
     return headers
 
 
 def is_jwt_blacklisted(decoded_jwt):
     set_jwt_blacklist()
     urs_user_id = decoded_jwt["urs-user-id"]
+    blacklist = JWT_BLACKLIST["blacklist"]
+    user_blacklist_time = blacklist.get(urs_user_id)
 
-    if urs_user_id in JWT_BLACKLIST["blacklist"]:
+    if user_blacklist_time is not None:
         jwt_mint_time = decoded_jwt["iat"]
-        user_blacklist_time = JWT_BLACKLIST["blacklist"][urs_user_id]
         log.debug(f"JWT was minted @:  {jwt_mint_time}, the Blacklist is for cookies BEFORE: {user_blacklist_time}")
 
         if user_blacklist_time >= jwt_mint_time:

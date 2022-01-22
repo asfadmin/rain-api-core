@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import os
@@ -16,8 +17,8 @@ LOG_CENSOR = [
           "replace": "\\g<1>XXX<EDLTOKEN>XXX\\g<2>",
           "description": "X-out non-JWT EDL token"
         },
-        { "regex": r"(Basic [A-Za-z0-9-_]{5})[A-Za-z0-9]*([A-Za-z0-9-_]{5})",
-          "replace": "\\g<1>XXX<BASICAUTH>XXX\\g<2>",
+        { "regex": r"(Basic )[A-Za-z0-9+/=]{4,}",
+          "replace": "\\g<1>XXX<BASICAUTH>XXX",
           "description": "X-out Basic Auth Credentials"
         },
         { "regex": r"([^A-Za-z0-9/+=][A-Za-z0-9/+=]{5})[A-Za-z0-9/+=]{30}([A-Za-z0-9/+=]{5}[^A-Za-z0-9/+=])",
@@ -26,15 +27,24 @@ LOG_CENSOR = [
         }
     ]
 
+
 def return_timing_object(**timing):
-    timing_object = { "service": "Unknown", "endpoint": "Unknown", "method": "GET", "duration": 0, "unit": "milliseconds"}
-    timing_object.update({k.lower(): v for k,v in timing.items()})
-    return {"timing":timing_object }
+    timing_object = {
+        "service": "Unknown",
+        "endpoint": "Unknown",
+        "method": "GET",
+        "duration": 0,
+        "unit": "milliseconds"
+    }
+    timing_object.update({k.lower(): v for k, v in timing.items()})
+    return {"timing": timing_object}
+
 
 def duration(time_in):
     # Return the time duration in milliseconds
     delta = time.time() - time_in
-    return(float("{:.2f}".format(delta*1000)))
+    return round(delta * 1000, ndigits=2)
+
 
 def filter_log_credentials(msg):
     if UNCENSORED_LOGGING:
@@ -49,29 +59,27 @@ def filter_log_credentials(msg):
 
 
 def reformat_for_json(msg):
-    if type(msg) is dict:
-        return json.dumps(msg).replace("'", '"')
-    if isinstance(msg, str) and '{' in msg:
-        try:
-            json_obj = json.loads(msg)
-            return json.dumps(json_obj).replace("'", '"')
-        except json.decoder.JSONDecodeError:
-            # Not JSON.
-            pass
+    if isinstance(msg, dict):
+        return json.dumps(msg)
+    if isinstance(msg, str):
+        if '{' in msg:
+            with contextlib.suppress(json.decoder.JSONDecodeError):
+                return json.dumps(json.loads(msg))
+        return msg
     return str(msg)
 
 
 class CustomLogFilter(logging.Filter):
-
     def __init__(self,  *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.params = { 'build_vers': os.getenv("BUILD_VERSION", "NOBUILD"),
-                        'maturity': os.getenv('MATURITY', 'DEV'),
-                        'request_id': None,
-                        'origin_request_id': None,
-                        'user_id': None,
-                        'route': None
-                      }
+        self.params = {
+            'build_vers': os.getenv("BUILD_VERSION", "NOBUILD"),
+            'maturity': os.getenv('MATURITY', 'DEV'),
+            'request_id': None,
+            'origin_request_id': None,
+            'user_id': None,
+            'route': None
+        }
 
     def filter(self, record):
         record.msg = filter_log_credentials(reformat_for_json(record.msg))
@@ -84,8 +92,7 @@ class CustomLogFilter(logging.Filter):
         return True
 
     def update(self, **context):
-        for key in context:
-            self.params.update({key: context[key]})
+        self.params.update(context)
 
 
 custom_log_filter = CustomLogFilter()
@@ -96,35 +103,38 @@ def log_context(**context):
 
 
 def get_log():
-
     loglevel = os.getenv('LOGLEVEL', 'INFO')
     logtype = os.getenv('LOGTYPE', 'json')
     if logtype == 'flat':
-        log_fmt_str = "%(levelname)s: %(message)s (%(filename)s line " + \
-                      "%(lineno)d/%(build_vers)s/%(maturity)s) - " + \
-                      "RequestId: %(request_id)s; OriginRequestId: %(origin_request_id)s; user_id: %(user_id)s; route: %(route)s"
+        log_fmt_str = (
+            "%(levelname)s: %(message)s (%(filename)s line %(lineno)d/%(build_vers)s/%(maturity)s) - "
+            "RequestId: %(request_id)s; OriginRequestId: %(origin_request_id)s; user_id: %(user_id)s; route: %(route)s"
+        )
     else:
-        log_fmt_str = '{"level": "%(levelname)s",  ' + \
-                      '"RequestId": "%(request_id)s", ' + \
-                      '"OriginRequestId": "%(origin_request_id)s", ' + \
-                      '"message": %(message)s, ' + \
-                      '"maturity": "%(maturity)s", ' + \
-                      '"user_id": "%(user_id)s", ' + \
-                      '"route": "%(route)s", ' + \
-                      '"build": "%(build_vers)s", ' + \
-                      '"filename": "%(filename)s", ' + \
-                      '"lineno": %(lineno)d } '
+        log_fmt_str = (
+            '{"level": "%(levelname)s",  '
+            '"RequestId": "%(request_id)s", '
+            '"OriginRequestId": "%(origin_request_id)s", '
+            '"message": "%(message)s", '
+            '"maturity": "%(maturity)s", '
+            '"user_id": "%(user_id)s", '
+            '"route": "%(route)s", '
+            '"build": "%(build_vers)s", '
+            '"filename": "%(filename)s", '
+            '"lineno": %(lineno)d}'
+        )
 
     logger = logging.getLogger()
 
     for h in logger.handlers:
         logger.removeHandler(h)
 
-    h = logging.StreamHandler(sys.stdout)
-    h.setFormatter(logging.Formatter(log_fmt_str))
-    h.addFilter(custom_log_filter)
-    logger.addHandler(h)
-    logger.setLevel(getattr(logging, loglevel))
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter(log_fmt_str))
+    handler.addFilter(custom_log_filter)
+
+    logger.addHandler(handler)
+    logger.setLevel(loglevel)
 
     if os.getenv("QUIETBOTO", 'TRUE').upper() == 'TRUE':
         # BOTO, be quiet plz
