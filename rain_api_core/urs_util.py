@@ -11,7 +11,7 @@ from rain_api_core.view_util import JWT_COOKIE_NAME, get_exp_time, make_set_cook
 log = logging.getLogger(__name__)
 
 
-def get_base_url(ctxt=False):
+def get_base_url(ctxt: dict = None) -> str:
     # Make a redirect url using optional custom domain_name, otherwise use raw domain/stage provided by API Gateway.
     try:
         domain = os.getenv('DOMAIN_NAME') or f"{ctxt['domainName']}/{ctxt['stage']}"
@@ -21,11 +21,11 @@ def get_base_url(ctxt=False):
         raise
 
 
-def get_redirect_url(ctxt=False):
+def get_redirect_url(ctxt: dict = None) -> str:
     return f'{get_base_url(ctxt)}login'
 
 
-def do_auth(code, redirect_url, aux_headers=None):
+def do_auth(code: str, redirect_url: str, aux_headers: dict = None) -> dict:
     aux_headers = aux_headers or {}  # A safer default
     url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
 
@@ -61,7 +61,7 @@ def do_auth(code, redirect_url, aux_headers=None):
         return {}
 
 
-def get_urs_url(ctxt, to=False):
+def get_urs_url(ctxt: dict, to: str = None) -> str:
     base_url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + '/oauth/authorize'
 
     # From URS Application
@@ -87,7 +87,7 @@ def get_urs_url(ctxt, to=False):
     return urs_url
 
 
-def get_profile(user_id, token, temptoken=False, aux_headers=None):
+def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: dict = None) -> dict:
     aux_headers = aux_headers or {}  # Safer Default
 
     if not user_id or not token:
@@ -124,7 +124,7 @@ def get_profile(user_id, token, temptoken=False, aux_headers=None):
     return {}
 
 
-def get_new_token_and_profile(user_id, cookietoken, aux_headers=None):
+def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict = None):
     aux_headers = aux_headers or {}  # A safer default
 
     # get a new token
@@ -162,7 +162,7 @@ def get_new_token_and_profile(user_id, cookietoken, aux_headers=None):
         return False
 
 
-def user_in_group_list(private_groups, user_groups):
+def user_in_group_list(private_groups: list, user_groups: list) -> bool:
     client_id = get_urs_creds()['UrsId']
     log.info("Searching for private groups {0} in {1}".format(private_groups, user_groups))
 
@@ -228,7 +228,7 @@ def user_in_group(private_groups, cookievars, refresh_first=False, aux_headers=N
     return False, new_profile
 
 
-def get_urs_creds():
+def get_urs_creds() -> dict:
     """
     Fetches URS creds from secrets manager.
     :return: looks like:
@@ -251,7 +251,7 @@ def get_urs_creds():
     return secret
 
 
-def user_profile_2_jwt_payload(user_id, access_token, user_profile):
+def user_profile_2_jwt_payload(user_id: str, access_token: str, user_profile: dict) -> dict:
     return {
         'first_name': user_profile['first_name'],
         'last_name': user_profile['last_name'],

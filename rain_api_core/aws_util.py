@@ -30,7 +30,7 @@ role_creds_cache = {
 }
 
 
-def get_region():
+def get_region() -> str:
     """
     Will determine and return current AWS region.
     :return: string describing AWS region
@@ -44,7 +44,7 @@ def get_region():
 
 
 @functools.lru_cache(maxsize=None)
-def retrieve_secret(secret_name):
+def retrieve_secret(secret_name: str) -> dict:
     global region    # pylint: disable=global-statement
     global botosess  # pylint: disable=global-statement
     t0 = time()
@@ -81,7 +81,7 @@ def retrieve_secret(secret_name):
     return {}
 
 
-def get_s3_resource():
+def get_s3_resource() -> boto_Session.resource:
     """
 
     :return: subclass of boto3.resources.base.ServiceResource
@@ -98,7 +98,7 @@ def get_s3_resource():
     return s3_resource
 
 
-def read_s3(bucket: str, key: str, s3: ServiceResource = None):
+def read_s3(bucket: str, key: str, s3: ServiceResource = None) -> str:
     """
     returns file
     :type bucket: str
@@ -123,7 +123,7 @@ def read_s3(bucket: str, key: str, s3: ServiceResource = None):
     return body
 
 
-def get_yaml(bucket: str, file_name: str):
+def get_yaml(bucket: str, file_name: str) -> dict:
     """
     Loads the YAML from a given bucket/filename
     :param bucket: bucket name
@@ -138,7 +138,7 @@ def get_yaml(bucket: str, file_name: str):
         raise
 
 
-def get_yaml_file(bucket, key):
+def get_yaml_file(bucket: str, key: str) -> dict:
     if not key:
         # No file was provided, send empty dict
         return {}
@@ -147,7 +147,7 @@ def get_yaml_file(bucket, key):
     return get_yaml(bucket, key)
 
 
-def get_role_creds(user_id: str = '', in_region: bool = False):
+def get_role_creds(user_id: str = None, in_region: bool = False):
     """
     :param user_id: string with URS username
     :param in_region: boolean If True a download role that works only in region will be returned
@@ -192,7 +192,7 @@ def get_role_creds(user_id: str = '', in_region: bool = False):
     return role_creds_cache[download_role_arn][user_id]["session"], session_offset
 
 
-def get_role_session(creds=None, user_id=None):
+def get_role_session(creds: dict = None, user_id: str = None) -> boto_Session:
     global session_cache  # pylint: disable=global-statement
     sts_resp = creds if creds else get_role_creds(user_id)[0]
     log.debug('sts_resp: {0}'.format(sts_resp))
@@ -210,7 +210,7 @@ def get_role_session(creds=None, user_id=None):
     return session_cache[session_id]
 
 
-def get_region_cidr_ranges():
+def get_region_cidr_ranges() -> list:
     """
     :return: Utility function to download AWS regions
     """
@@ -233,7 +233,7 @@ def get_region_cidr_ranges():
     return region_list_cache
 
 
-def check_in_region_request(ip_addr: str):
+def check_in_region_request(ip_addr: str) -> bool:
     """
     :param ip_addr: string with ip address to be checked for in-regionness
     :return: boolean True if ip_addr is in_region, False otherwise

@@ -36,7 +36,7 @@ JWT_BLACKLIST = {}
 
 
 @functools.lru_cache(maxsize=None)
-def get_jwt_keys():
+def get_jwt_keys() -> dict:
     raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
 
     return {
@@ -104,7 +104,7 @@ def get_html_body(template_vars: dict, templatefile: str = 'root.html') -> str:
     return template.render(**template_vars)
 
 
-def get_cookie_vars(headers: dict):
+def get_cookie_vars(headers: dict) -> dict:
     """
     Extracts and decodes and returns relevant cookies from http headers
     :param headers: dict of http headers
@@ -124,15 +124,15 @@ def get_cookie_vars(headers: dict):
     return {}
 
 
-def get_exp_time():
+def get_exp_time() -> int:
     return int(time() + SESSTTL)
 
 
-def get_cookie_expiration_date_str():
+def get_cookie_expiration_date_str() -> str:
     return format_7231_date(get_exp_time())
 
 
-def get_cookies(hdrs: dict):
+def get_cookies(hdrs: dict) -> dict:
     cookie_string = hdrs.get('cookie') or hdrs.get('Cookie') or hdrs.get('COOKIE')
     if not cookie_string:
         return {}
@@ -147,7 +147,7 @@ def get_cookies(hdrs: dict):
     }
 
 
-def make_jwt_payload(payload, algo=JWT_ALGO):
+def make_jwt_payload(payload: dict, algo: str = JWT_ALGO) -> str:
     try:
         log.debug('using secret: {}'.format(os.getenv('JWT_KEY_SECRET_NAME', '')))
         timer = time()
@@ -165,7 +165,7 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
         return ''
 
 
-def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
+def decode_jwt_payload(jwt_payload: str, algo: str = JWT_ALGO) -> dict:
     try:
         rsa_pub_key = get_jwt_keys()['rsa_pub_key']
         timer = time()
@@ -194,14 +194,14 @@ def decode_jwt_payload(jwt_payload, algo=JWT_ALGO):
     return cookiedecoded
 
 
-def craft_cookie_domain_payloadpiece(cookie_domain):
+def craft_cookie_domain_payloadpiece(cookie_domain: str) -> str:
     if cookie_domain:
         return f'; Domain={cookie_domain}'
 
     return ''
 
 
-def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
+def make_set_cookie_headers_jwt(payload: dict, expdate: str = '', cookie_domain: str = '') -> dict:
     jwt_payload = make_jwt_payload(payload)
     cookie_domain_payloadpiece = craft_cookie_domain_payloadpiece(cookie_domain)
 
@@ -211,7 +211,7 @@ def make_set_cookie_headers_jwt(payload, expdate='', cookie_domain=''):
     return headers
 
 
-def is_jwt_blacklisted(decoded_jwt):
+def is_jwt_blacklisted(decoded_jwt: dict) -> bool:
     set_jwt_blacklist()
     urs_user_id = decoded_jwt["urs-user-id"]
     blacklist = JWT_BLACKLIST["blacklist"]
@@ -231,7 +231,7 @@ def is_jwt_blacklisted(decoded_jwt):
     return False
 
 
-def set_jwt_blacklist():
+def set_jwt_blacklist() -> dict:
     global JWT_BLACKLIST  # pylint: disable=global-statement
 
     if JWT_BLACKLIST and time() - JWT_BLACKLIST["timestamp"] <= (10 * 60):  # If cached in the last 10 minutes

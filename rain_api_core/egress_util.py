@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 # pylint: disable=logging-fstring-interpolation
 
 
-def prepend_bucketname(name):
+def prepend_bucketname(name: str) -> str:
     prefix = os.getenv("BUCKETNAME_PREFIX")
     if prefix is None:
         maturity = os.getenv("MATURITY", "DEV")[0].lower()
@@ -19,11 +19,11 @@ def prepend_bucketname(name):
     return f"{prefix}{name}"
 
 
-def hmacsha256(key, string):
+def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
     return hmac.new(key, string.encode('utf-8'), sha256)
 
 
-def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET'):
+def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET') -> str:
     timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     datez = timez[:8]
     hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "." + region_name if region_name != "us-east-1" else "")
@@ -67,7 +67,7 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     return url
 
 
-def get_bucket_dynamic_path(path_list, b_map):
+def get_bucket_dynamic_path(path_list: list, b_map: dict):
     # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
     if 'MAP' in b_map:
         map_dict = b_map['MAP']
@@ -115,7 +115,7 @@ def get_bucket_dynamic_path(path_list, b_map):
     return None, None, None, {}
 
 
-def process_varargs(varargs: list, b_map: dict):
+def process_varargs(varargs: str, b_map: dict):
     """
     wrapper around process_request that returns legacy values to preserve backward compatibility
     :param varargs: a list with the path to the file requested.
@@ -127,7 +127,7 @@ def process_varargs(varargs: list, b_map: dict):
     return path, bucket, object_name
 
 
-def process_request(varargs, b_map):
+def process_request(varargs: str, b_map: dict):
     split_args = varargs.split("/")
 
     # Make sure we got at least 1 path, and 1 file name:
@@ -150,7 +150,7 @@ def process_request(varargs, b_map):
     return path, bucket, object_name, headers
 
 
-def bucket_prefix_match(bucket_check, bucket_map, object_name=""):
+def bucket_prefix_match(bucket_check: str, bucket_map: str, object_name: str = "") -> bool:
     # NOTE: https://github.com/asfadmin/thin-egress-app/issues/188
     log.debug(f"bucket_prefix_match(): checking if {bucket_check} matches {bucket_map} w/ optional obj '{object_name}'")
     prefix, *tail = bucket_map.split("/", 1)
@@ -161,7 +161,7 @@ def bucket_prefix_match(bucket_check, bucket_map, object_name=""):
 
 
 # Sort public/private buckets such that object-prefixes are processed FIRST
-def get_sorted_bucket_list(b_map, bucket_group):
+def get_sorted_bucket_list(b_map: dict, bucket_group: str) -> list:
     if bucket_group not in b_map:
         # But why?!
         log.warning(f"Bucket map does not contain bucket group '{bucket_group}'")
@@ -177,7 +177,7 @@ def get_sorted_bucket_list(b_map, bucket_group):
     return []
 
 
-def check_private_bucket(bucket, b_map, object_name=""):
+def check_private_bucket(bucket: str, b_map: dict, object_name: str = ""):
     log.debug('check_private_buckets(): bucket: {}'.format(bucket))
 
     # Check public bucket file:
@@ -194,7 +194,7 @@ def check_private_bucket(bucket, b_map, object_name=""):
     return False
 
 
-def check_public_bucket(bucket, b_map, object_name=""):
+def check_public_bucket(bucket: str, b_map: dict, object_name: str = ""):
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
         # TODO(reweeden): cache the sorted list (refactoring to object would be easiest)
