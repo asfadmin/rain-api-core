@@ -123,10 +123,10 @@ def test_get_bucket_dynamic_path_nested():
 
 
 def test_get_bucket_dynamic_path_nonexistent():
-    assert get_bucket_dynamic_path([], {}) == (False, False, False, {})
-    assert get_bucket_dynamic_path(["foo"], {"bar": "bucket1"}) == (False, False, False, {})
-    assert get_bucket_dynamic_path(["foo"], {"foo": {}}) == (False, False, False, {})
-    assert get_bucket_dynamic_path(["foo", "bar"], {"foo": {"qux":  "bucket1"}}) == (False, False, False, {})
+    assert get_bucket_dynamic_path([], {}) == (None, None, None, {})
+    assert get_bucket_dynamic_path(["foo"], {"bar": "bucket1"}) == (None, None, None, {})
+    assert get_bucket_dynamic_path(["foo"], {"foo": {}}) == (None, None, None, {})
+    assert get_bucket_dynamic_path(["foo", "bar"], {"foo": {"qux":  "bucket1"}}) == (None, None, None, {})
 
 
 @mock.patch(f"{MODULE}.process_request", autospec=True)
@@ -162,7 +162,7 @@ def test_process_request_invalid():
         }
     }
     assert process_request("foo", bucket_map) == ("foo", None, None, {})
-    assert process_request("bar/baz", bucket_map) == ("bar", False, "baz", {})
+    assert process_request("bar/baz", bucket_map) == ("bar", None, "baz", {})
 
 
 def test_process_request_reverse_url(monkeypatch):
@@ -173,7 +173,7 @@ def test_process_request_reverse_url(monkeypatch):
             }
         }
     }
-    assert process_request("bar/foo/baz", bucket_map) == ("bar/foo", False, "baz", {})
+    assert process_request("bar/foo/baz", bucket_map) == ("bar/foo", None, "baz", {})
 
     monkeypatch.setenv("USE_REVERSE_BUCKET_MAP", "TRUE")
     assert process_request("bar/foo/baz", bucket_map) == ("foo", "gsfc-ngap-d-bucket1", "bar/baz", {})

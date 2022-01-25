@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import boto3
+import botocore
 import jwt
 import moto
 import pytest
@@ -126,8 +127,7 @@ def test_cache_html_templates_missing_bucket(local_cachedir, monkeypatch):
     monkeypatch.setenv("HTML_TEMPLATE_DIR", "templates")
     monkeypatch.setenv("CONFIG_BUCKET", "does_not_exist")
 
-    # TODO(reweeden): what is the expected behavior when the bucket is not found?
-    with pytest.raises(Exception):
+    with pytest.raises(botocore.exceptions.ClientError):
         cache_html_templates()
 
 

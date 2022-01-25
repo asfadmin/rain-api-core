@@ -2,7 +2,6 @@ import functools
 import json
 import logging
 import os
-import sys
 import urllib.request
 from time import time
 
@@ -135,7 +134,7 @@ def get_yaml(bucket: str, file_name: str):
         cfg_yaml = read_s3(bucket, file_name)
         return safe_load(cfg_yaml)
     except ClientError as e:
-        log.error('Had trouble getting yaml file s3://{}/{}, {}'.format(bucket, file_name, e))
+        log.error('Could not download yaml file s3://{}/{}, {}'.format(bucket, file_name, e))
         raise
 
 
@@ -143,15 +142,9 @@ def get_yaml_file(bucket, key):
     if not key:
         # No file was provided, send empty dict
         return {}
-    try:
-        log.info("Attempting to download yaml s3://{0}/{1}".format(bucket, key))
-        optional_file = get_yaml(bucket, key)
-        return optional_file
-    except ClientError as e:
-        # The specified file did not exist
-        log.error("Could not download yaml @ s3://{0}/{1}: {2}".format(bucket, key, e))
-        # TODO(reweeden): remove this, why is this here!!!?
-        sys.exit()
+
+    log.info("Attempting to download yaml file s3://{0}/{1}".format(bucket, key))
+    return get_yaml(bucket, key)
 
 
 def get_role_creds(user_id: str = '', in_region: bool = False):

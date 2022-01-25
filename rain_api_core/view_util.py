@@ -26,8 +26,8 @@ HTML_TEMPLATE_STATUS = ''
 HTML_TEMPLATE_LOCAL_CACHEDIR = '/tmp/templates/'  # nosec We want to leverage instance persistance
 HTML_TEMPLATE_PROJECT_DIR = Path().resolve() / 'templates'
 
-# TODO(reweeden): explain what is going on here
-SESSTTL = int(os.getenv('SESSION_TTL', '168')) * 60 * 60
+_HOURS_PER_WEEK = 7 * 24
+SESSTTL = int(os.getenv('SESSION_TTL', _HOURS_PER_WEEK)) * 60 * 60
 
 JWT_ALGO = os.getenv('JWT_ALGO', 'RS256')
 JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
@@ -154,13 +154,13 @@ def make_jwt_payload(payload, algo=JWT_ALGO):
         encoded = jwt.encode(payload, get_jwt_keys()['rsa_priv_key'], algorithm=algo)
         log.info(return_timing_object(service="jwt", endpoint="jwt.encode()", duration=duration(timer)))
         return encoded
-        # TODO(reweeden): how can these error types possibly be triggered!? jwt.encode will raise a TypeError on bad
-        # input, but never ValueError or AttributeError. There is also no code here that will raise IndexError
-    except IndexError as e:
+    except KeyError as e:
         log.error('jwt_keys may be malformed: ')
         log.error(e)
         return ''
     except (ValueError, AttributeError) as e:
+        # TODO(reweeden): how can these error types possibly be triggered!? jwt.encode will raise a TypeError on bad
+        # input, but never ValueError or AttributeError.
         log.error('problem with encoding cookie: {}'.format(e))
         return ''
 

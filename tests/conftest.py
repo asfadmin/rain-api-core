@@ -21,8 +21,6 @@ class MockBoto3Session(boto3.Session):
         return resource
 
 
-# TODO(reweeden): Do we need both?
-# boto3.Session = MockBoto3Session
 boto3.session.Session = MockBoto3Session
 
 

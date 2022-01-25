@@ -129,10 +129,8 @@ def test_get_yaml_file(data):
 @moto.mock_s3
 def test_get_yaml_file_nonexistent():
     assert get_yaml_file("nonexistent", "") == {}
-
-    # TODO(reweeden): a library function like this should NEVER be raising a SystemExit
-    with pytest.raises(SystemExit):
-        assert get_yaml_file("nonexistent", "sample.yaml")
+    with pytest.raises(botocore.exceptions.ClientError):
+        get_yaml_file("nonexistent", "sample.yaml")
 
 
 @moto.mock_sts

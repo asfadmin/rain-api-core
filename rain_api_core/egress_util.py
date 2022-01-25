@@ -109,11 +109,10 @@ def get_bucket_dynamic_path(path_list, b_map):
         else:
             log.warning("Could not find {0} in bucketmap".format(path_part))
             log.debug('said bucketmap: {}'.format(map_dict))
-            return False, False, False, {}
+            return None, None, None, {}
 
-    # TODO(reweeden): Return `None` instead of `False`
     # what? No path?
-    return False, False, False, {}
+    return None, None, None, {}
 
 
 def process_varargs(varargs: list, b_map: dict):
