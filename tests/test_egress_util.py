@@ -70,16 +70,18 @@ def test_get_presigned_url(mock_datetime):
     )
 )
 def test_get_bucket_dynamic_path(bucket_map):
-    path_list = ["foo", "bar"]
+    # Using a tuple instead of a list to ensure the input is not modified
+    path_list = ["foo", "bar", "baz"]
+    original_path_list = list(path_list)
     original_bucket_map = copy.deepcopy(bucket_map)
 
     path, bucket, object, headers = get_bucket_dynamic_path(path_list, bucket_map)
     assert path == "gsfc-ngap-d-bucket1"
     assert bucket == "foo"
-    assert object == "bar"
+    assert object == "bar/baz"
     assert headers == {}
-    # TODO(reweeden): Should we really be modifying our input here?
-    assert path_list == ["bar"]
+    # The input should not have been modified
+    assert path_list == original_path_list
     assert bucket_map == original_bucket_map
 
 

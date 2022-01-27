@@ -68,50 +68,37 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
 
 
 def get_bucket_dynamic_path(path_list: list, b_map: dict):
-    # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
-    if 'MAP' in b_map:
-        map_dict = b_map['MAP']
-    else:
-        map_dict = b_map
+    # Old and REVERSE format has no 'MAP'.
+    node = b_map.get("MAP", b_map)
 
-    mapping = []
-
-    log.debug("Pathparts is {0}".format(", ".join(path_list)))
-    # walk the bucket map to see if this path is valid
-    for path_part in path_list:
+    log.debug("Pathparts is {}".format(path_list))
+    # Walk the bucket map to see if this path is valid
+    for i, path_part in enumerate(path_list):
         # Check if we hit a leaf of the YAML tree
-        if (mapping and isinstance(map_dict, str)) or 'bucket' in map_dict:
-            customheaders = {}
-            if isinstance(map_dict, dict) and 'bucket' in map_dict:
-                bucketname = map_dict['bucket']
-                if 'headers' in map_dict:
-                    customheaders = map_dict['headers']
-            else:
-                bucketname = map_dict
+        if isinstance(node, str):
+            bucket = node
+            headers = {}
+        elif "bucket" in node:
+            bucket = node["bucket"]
+            headers = node.get("headers") or {}
 
-            log.debug(f'mapping: {mapping}')
-            # Pop mapping off path_list
-            for _ in mapping:
-                path_list.pop(0)
-
-            # Join the remaining bits together to form object_name
-            object_name = "/".join(path_list)
-            bucket_path = "/".join(mapping)
-
-            log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
-            return prepend_bucketname(bucketname), bucket_path, object_name, customheaders
-
-        if path_part in map_dict:
-            map_dict = map_dict[path_part]
-            mapping.append(path_part)
-            log.debug("Found {0}, Mapping is now {1}".format(path_part, "/".join(mapping)))
-
+        elif path_part in node:
+            node = node[path_part]
+            continue
         else:
-            log.warning("Could not find {0} in bucketmap".format(path_part))
-            log.debug('said bucketmap: {}'.format(map_dict))
-            return None, None, None, {}
+            log.warning("Could not find {} in bucketmap".format(path_part))
+            log.debug("bucketmap: {}".format(node))
+            break
 
-    # what? No path?
+        assert bucket is not None
+        # Split the path into bucket_name and object_name
+        head, tail = path_list[:i], path_list[i:]
+        bucket_path = "/".join(head)
+        object_name = "/".join(tail)
+
+        log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
+        return prepend_bucketname(bucket), bucket_path, object_name, headers
+
     return None, None, None, {}
 
 
