@@ -158,7 +158,7 @@ class JSONFormatter(logging.Formatter):
         obj = self.formatMessage(record)
         assert not any(isinstance(val, PercentPlaceholder) for val in _walk_json_values(obj))
 
-        return filter_log_credentials(json.dumps(obj))
+        return filter_log_credentials(json.dumps(obj, default=str))
 
 
 class TaggingFilter(logging.Filter):

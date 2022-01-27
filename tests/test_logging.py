@@ -269,6 +269,18 @@ def test_json_logging_quotes_malformed(logger, log_io):
     assert json.loads(msg) == {"message": obj}
 
 
+def test_json_logging_not_serializable(logger, log_io):
+    class SomeClass():
+        def __repr__(self) -> str:
+            return "SomeClass()"
+
+    logger.info(SomeClass())
+
+    msg = log_io.getvalue()
+    assert msg == '{"message": "SomeClass()"}\n'
+    assert json.loads(msg) == {"message": "SomeClass()"}
+
+
 def test_json_logging_missing_key(logger, custom_log_handler, log_io):
     custom_log_handler.setFormatter(JSONFormatter("%(does_not_exist)s"))
     logger.info("hello")
