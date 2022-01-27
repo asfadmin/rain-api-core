@@ -5,7 +5,8 @@ import urllib
 from time import time
 
 from rain_api_core.aws_util import retrieve_secret
-from rain_api_core.general_util import duration, log_context, return_timing_object
+from rain_api_core.general_util import duration, return_timing_object
+from rain_api_core.logging import log_context
 from rain_api_core.view_util import JWT_COOKIE_NAME, get_exp_time, make_set_cookie_headers_jwt
 
 log = logging.getLogger(__name__)
