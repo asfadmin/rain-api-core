@@ -343,24 +343,6 @@ def test_decode_jwt_payload_blacklist(
     assert decode_jwt_payload(encoded) == payload
 
 
-@mock.patch(f"{MODULE}.is_jwt_blacklisted", autospec=True)
-@mock.patch(f"{MODULE}.get_jwt_keys", autospec=True)
-def test_decode_jwt_payload_blacklist_error(
-    mock_get_jwt_keys,
-    mock_is_jwt_blacklisted,
-    jwt_pub_key,
-    jwt_priv_key,
-    monkeypatch
-):
-    mock_get_jwt_keys.return_value = {"rsa_pub_key": jwt_pub_key}
-    mock_is_jwt_blacklisted.side_effect = Exception("Test exception")
-    monkeypatch.setenv("BLACKLIST_ENDPOINT", "true")
-    payload = {"foo": "bar"}
-
-    encoded = jwt.encode(payload, jwt_priv_key, algorithm="RS256")
-    assert decode_jwt_payload(encoded) == payload
-
-
 @mock.patch(f"{MODULE}.make_jwt_payload", autospec=True)
 @mock.patch(f"{MODULE}.get_cookie_expiration_date_str", autospec=True)
 def test_make_set_cookie_headers_jwt(mock_get_cookie_expiration_date_str, mock_make_jwt_payload):
@@ -393,6 +375,13 @@ def test_is_jwt_blacklisted(jwt_blacklist, mock_set_jwt_blacklist):
 
     assert is_jwt_blacklisted({"urs-user-id": "user_id", "iat": 2000}) is False
     assert is_jwt_blacklisted({"urs-user-id": "other_user", "iat": 10}) is False
+
+
+@mock.patch(f"{MODULE}.set_jwt_blacklist", autospec=True)
+def test_is_jwt_blacklisted_error(mock_set_jwt_blacklist):
+    mock_set_jwt_blacklist.side_effect = Exception("Test exception")
+
+    assert is_jwt_blacklisted({"urs-user-id": "user_id", "iat": 10}) is False
 
 
 @mock.patch(f"{MODULE}.time", autospec=True)

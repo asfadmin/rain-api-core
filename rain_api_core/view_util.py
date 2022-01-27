@@ -181,12 +181,8 @@ def decode_jwt_payload(jwt_payload: str, algo: str = JWT_ALGO) -> dict:
         return {}
 
     if os.getenv("BLACKLIST_ENDPOINT"):
-        try:
-            if is_jwt_blacklisted(cookiedecoded):
-                return {}
-        except Exception as e:
-            # TODO(reweeden): This error handling should be moved into `is_jwt_blacklisted` and/or `set_jwt_blacklist`
-            log.debug(f"Received the following error while checking the given JWT against the blacklist: {e}")
+        if is_jwt_blacklisted(cookiedecoded):
+            return {}
     else:
         log.debug('No environment variable BLACKLIST_ENDPOINT')
 
@@ -212,23 +208,27 @@ def make_set_cookie_headers_jwt(payload: dict, expdate: str = '', cookie_domain:
 
 
 def is_jwt_blacklisted(decoded_jwt: dict) -> bool:
-    set_jwt_blacklist()
-    urs_user_id = decoded_jwt["urs-user-id"]
-    blacklist = JWT_BLACKLIST["blacklist"]
-    user_blacklist_time = blacklist.get(urs_user_id)
+    try:
+        set_jwt_blacklist()
+        urs_user_id = decoded_jwt["urs-user-id"]
+        blacklist = JWT_BLACKLIST["blacklist"]
+        user_blacklist_time = blacklist.get(urs_user_id)
 
-    if user_blacklist_time is not None:
-        jwt_mint_time = decoded_jwt["iat"]
-        log.debug(f"JWT was minted @:  {jwt_mint_time}, the Blacklist is for cookies BEFORE: {user_blacklist_time}")
+        if user_blacklist_time is not None:
+            jwt_mint_time = decoded_jwt["iat"]
+            log.debug(f"JWT was minted @:  {jwt_mint_time}, the Blacklist is for cookies BEFORE: {user_blacklist_time}")
 
-        if user_blacklist_time >= jwt_mint_time:
-            log.info(f"User {urs_user_id}'s JWT was minted before blacklist date and is INVALID")
-            return True
-        else:
-            log.info(f"User {urs_user_id}s JWT was minted AFTER blacklist date and is still VALID")
+            if user_blacklist_time >= jwt_mint_time:
+                log.info(f"User {urs_user_id}'s JWT was minted before blacklist date and is INVALID")
+                return True
+            else:
+                log.info(f"User {urs_user_id}s JWT was minted AFTER blacklist date and is still VALID")
 
-    log.info(f"User {urs_user_id} is NOT in the blacklist")
-    return False
+        log.info(f"User {urs_user_id} is NOT in the blacklist")
+        return False
+    except Exception:
+        log.debug("Error checking JWT against the blacklist", exc_info=True)
+        return False
 
 
 def set_jwt_blacklist() -> dict:
