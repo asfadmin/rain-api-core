@@ -319,8 +319,7 @@ def do_login(args, context, cookie_domain='', aux_headers=None):
         else:
             redirect_to = get_base_url(context)
 
-        # TODO(reweeden): Why is the last check there if we're setting to the empty list anyways?
-        if 'user_groups' not in user_profile or not user_profile['user_groups']:
+        if 'user_groups' not in user_profile:
             user_profile['user_groups'] = []
 
         jwt_cookie_payload = user_profile_2_jwt_payload(user_id, auth['access_token'], user_profile)
