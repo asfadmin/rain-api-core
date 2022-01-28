@@ -83,7 +83,8 @@ class PercentPlaceholder():
     The placeholder can be formatted with the % operator.
 
     >>> p = PercentPlaceholder("message")
-    >>> assert p % {"message": "hello"} == "hello"
+    >>> p % {"message": "hello"}
+    'hello'
     """
 
     __slots__ = ("name", )
@@ -97,8 +98,27 @@ class PercentPlaceholder():
 
 
 class JSONPercentStyle():
+    """Format log records into a JSON object (dict, list) using percent formatting
+
+    The `fmt` dict will be searched for percent formatting strings. When a value in
+    the structure is a string that entirely matches a single substitution parameter,
+    it will be replaced entirely by a JSON object. When the string contains multiple
+    parameters, or contains other data, then the data will be substituted into the
+    string as normal.
+
+    Examples:
+    >>> style1 = JSONPercentStyle({"msg": "%(message)s"})
+    >>> record = logging.makeLogRecord({"message": [1, 2, 3]})
+    >>> style1.format(record)
+    {'msg': [1, 2, 3]}
+
+    >>> style2 = JSONPercentStyle({"msg": "The message is %(message)s"})
+    >>> record = logging.makeLogRecord({"message": [1, 2, 3]})
+    >>> style2.format(record)
+    {'msg': 'The message is [1, 2, 3]'}
+    """
+
     default_format = {"message": "%(message)s"}
-    asctime_search = '%(asctime)'
     placeholder_pattern = re.compile(r"^%\((\w+)\)s$")
     validation_pattern = re.compile(r'%\(\w+\)[#0+ -]*(\*|\d+)?(\.(\*|\d+))?[diouxefgcrsa%]', re.I)
 
@@ -119,8 +139,8 @@ class JSONPercentStyle():
         return _map_json_object(func, obj)
 
     def _usesTime(self):
-        for val in _walk_json_values(self._fmt):
-            if isinstance(val, str) and self.asctime_search in val:
+        for val in _iter_json_values(self._fmt):
+            if isinstance(val, str) and "%(asctime)" in val:
                 return True
             if isinstance(val, PercentPlaceholder) and val.name == "asctime":
                 return True
@@ -129,23 +149,30 @@ class JSONPercentStyle():
     def usesTime(self):
         return self._uses_time
 
-    def _format(self, record):
+    def _format(self, record: logging.LogRecord):
         return _fmt_json_object(self._fmt, record.__dict__)
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord):
         try:
             return self._format(record)
         except KeyError as e:
-            raise ValueError('Formatting field not found in record: %s' % e)
+            raise ValueError(f"Formatting field not found in record: {e}")
 
 
 class JSONFormatter(logging.Formatter):
-    def __init__(self, fmt=None, datefmt: str = None):
-        # Changing the type from the base class
-        self._style: JSONPercentStyle = JSONPercentStyle(fmt)
+    """Format log records as JSON objects"""
 
-        self._fmt = self._style._fmt
+    def __init__(self, fmt=None, datefmt: str = None):
+        self._json_style = JSONPercentStyle(fmt)
+
+        self._fmt = self._json_style._fmt
         self.datefmt = datefmt
+
+    def usesTime(self) -> bool:
+        return self._json_style.usesTime()
+
+    def formatMessage(self, record: logging.LogRecord):
+        return self._json_style.format(record)
 
     def format(self, record: logging.LogRecord) -> str:
         # Perform substitutions on the record itself
@@ -156,7 +183,7 @@ class JSONFormatter(logging.Formatter):
         record.exc_obj = self.formatException(record.exc_info).split("\n") if record.exc_info else None
 
         obj = self.formatMessage(record)
-        assert not any(isinstance(val, PercentPlaceholder) for val in _walk_json_values(obj))
+        assert not any(isinstance(val, PercentPlaceholder) for val in _iter_json_values(obj))
 
         return filter_log_credentials(json.dumps(obj, default=str))
 
@@ -190,7 +217,7 @@ def log_context(**context):
     custom_log_filter.update(**context)
 
 
-def filter_log_credentials(msg):
+def filter_log_credentials(msg: str):
     if UNCENSORED_LOGGING:
         return msg
 
@@ -223,12 +250,12 @@ def _map_json_object(func, obj):
         return func(obj)
 
 
-def _walk_json_values(obj):
+def _iter_json_values(obj):
     if isinstance(obj, dict):
         for val in obj.values():
-            yield from _walk_json_values(val)
+            yield from _iter_json_values(val)
     elif isinstance(obj, list):
         for val in obj:
-            yield from _walk_json_values(val)
+            yield from _iter_json_values(val)
     else:
         yield obj
