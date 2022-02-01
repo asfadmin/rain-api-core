@@ -69,9 +69,13 @@ def get_urs_url(ctxt: dict, to: str = None) -> str:
     client_id = get_urs_creds()['UrsId']
 
     log.debug('domain name: {0}'.format(os.getenv('DOMAIN_NAME', 'no domainname set')))
-    log.debug('if no domain name set: {}.execute-api.{}.amazonaws.com/{}'.format(ctxt['apiId'], os.getenv('AWS_DEFAULT_REGION', '<region>'), ctxt['stage']))
+    log.debug('if no domain name set: {}.execute-api.{}.amazonaws.com/{}'.format(
+        ctxt['apiId'],
+        os.getenv('AWS_DEFAULT_REGION', '<region>'),
+        ctxt['stage']
+    ))
 
-    urs_url = '{0}?client_id={1}&response_type=code&redirect_uri={2}'.format(base_url, client_id, get_redirect_url(ctxt))
+    urs_url = f'{base_url}?client_id={client_id}&response_type=code&redirect_uri={get_redirect_url(ctxt)}'
     if to:
         urs_url += f"&state={to}"
 
@@ -121,7 +125,10 @@ def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: di
             log.debug('because error above, going to get_new_token_and_profile()')
             return get_new_token_and_profile(user_id, token, aux_headers)
 
-        log.debug('We got that 401 above and we\'re using a temptoken ({}), so giving up and not getting a profile.'.format(temptoken))
+        log.debug(
+            f"We got that 401 above and we're using a temptoken ({temptoken}), "
+            "so giving up and not getting a profile."
+        )
     return {}
 
 
@@ -184,14 +191,18 @@ def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh
         user_profile = get_profile(user_id, token, aux_headers=aux_headers)
         new_profile = user_profile
 
-    if isinstance(user_profile, dict) and 'user_groups' in user_profile and user_in_group_list(private_groups, user_profile['user_groups']):
+    if (
+        isinstance(user_profile, dict)
+        and 'user_groups' in user_profile
+        and user_in_group_list(private_groups, user_profile['user_groups'])
+    ):
         log.info("User {0} belongs to private group".format(user_id))
         return True, new_profile
 
     # Couldn't find user in provided groups, but we may as well look at a fresh group list:
     if not refresh_first:
         # we have a maybe not so fresh user_profile and we could try again to see if someone added a group to this user:
-        log.debug("Could not validate user {0} belonging to groups {1}, attempting profile refresh".format(user_id, private_groups))
+        log.debug(f"Could not validate user {user_id} belonging to groups {private_groups}, attempting profile refresh")
 
         return user_in_group_urs(private_groups, user_id, {}, refresh_first=True, aux_headers=aux_headers)
     log.debug("Even after profile refresh, user {0} does not belong to groups {1}".format(user_id, private_groups))
@@ -223,7 +234,11 @@ def user_in_group(private_groups, cookievars, refresh_first=False, aux_headers=N
 
     if not in_group and not refresh_first:
         # one last ditch effort to see if they were so very recently added to group:
-        jwt_payload['urs-groups'] = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'], aux_headers=aux_headers)['user_groups']
+        jwt_payload['urs-groups'] = get_profile(
+            jwt_payload['urs-user-id'],
+            jwt_payload['urs-access-token'],
+            aux_headers=aux_headers
+        )['user_groups']
         return user_in_group(private_groups, cookievars, refresh_first=True, aux_headers=aux_headers)
 
     return False, new_profile

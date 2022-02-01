@@ -28,9 +28,9 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     datez = timez[:8]
     hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "." + region_name if region_name != "us-east-1" else "")
 
-    cred   = session['Credentials']['AccessKeyId']
+    cred = session['Credentials']['AccessKeyId']
     secret = session['Credentials']['SecretAccessKey']
-    token  = session['Credentials']['SessionToken']
+    token = session['Credentials']['SessionToken']
 
     aws4_request = "/".join([datez, region_name, "s3", "aws4_request"])
     cred_string = "{0}/{1}".format(cred, aws4_request)
@@ -47,16 +47,23 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     can_query_string = "&".join(parts)
 
     # Canonical Requst
-    can_req = method + "\n/" + object_name + "\n" + can_query_string + "\nhost:" + hostname + "\n\nhost\nUNSIGNED-PAYLOAD"
+    can_req = (
+        f"{method}\n"
+        f"/{object_name}\n"
+        f"{can_query_string}\n"
+        f"host:{hostname}\n\n"
+        "host\n"
+        "UNSIGNED-PAYLOAD"
+    )
     can_req_hash = sha256(can_req.encode('utf-8')).hexdigest()
 
     # String to Sign
     stringtosign = "\n".join(["AWS4-HMAC-SHA256", timez, aws4_request, can_req_hash])
 
     # Signing Key
-    StepOne =    hmacsha256("AWS4{0}".format(secret).encode('utf-8'), datez).digest()
-    StepTwo =    hmacsha256(StepOne, region_name).digest()
-    StepThree =  hmacsha256(StepTwo, "s3").digest()
+    StepOne = hmacsha256("AWS4{0}".format(secret).encode('utf-8'), datez).digest()
+    StepTwo = hmacsha256(StepOne, region_name).digest()
+    StepThree = hmacsha256(StepTwo, "s3").digest()
     SigningKey = hmacsha256(StepThree, "aws4_request").digest()
 
     # Final Signature

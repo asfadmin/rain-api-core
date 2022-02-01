@@ -191,7 +191,7 @@ class JSONFormatter(logging.Formatter):
 class TaggingFilter(logging.Filter):
     """Add extra attributes to each log record"""
 
-    def __init__(self,  *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.params = {
             "build_vers": os.getenv("BUILD_VERSION", "NOBUILD"),

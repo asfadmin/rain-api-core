@@ -64,7 +64,11 @@ def cache_html_templates() -> str:
     client = botoclient('s3')
     try:
         result = client.list_objects(Bucket=bucket, Prefix=templatedir, Delimiter='/')
-        log.info(return_timing_object(service="s3", endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)", duration=duration(timer)))
+        log.info(return_timing_object(
+            service="s3",
+            endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)",
+            duration=duration(timer)
+        ))
 
         for o in result.get('Contents'):
             filename = os.path.basename(o['Key'])
@@ -72,7 +76,11 @@ def cache_html_templates() -> str:
                 log.debug('attempting to save {}'.format(os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename)))
                 timer = time()
                 client.download_file(bucket, o['Key'], os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename))
-                log.info(return_timing_object(service="s3", endpoint=f"client().download_file(s3://{bucket}/{o['Key']})", duration=duration(timer)))
+                log.info(return_timing_object(
+                    service="s3",
+                    endpoint=f"client().download_file(s3://{bucket}/{o['Key']})",
+                    duration=duration(timer)
+                ))
         return 'CACHED'
     except (TypeError, KeyError) as e:
         log.error(e)
@@ -108,7 +116,8 @@ def get_cookie_vars(headers: dict) -> dict:
     """
     Extracts and decodes and returns relevant cookies from http headers
     :param headers: dict of http headers
-    :return: on success dict with keys env value of 'JWT_COOKIENAME' containing decoded jwt, 'urs-user-id', 'urs-access-token' on failure empty dict.
+    :return: on success dict with keys env value of 'JWT_COOKIENAME' containing decoded jwt, 'urs-user-id',
+        'urs-access-token' on failure empty dict.
     :type: dict
     """
     cooks = get_cookies(headers)

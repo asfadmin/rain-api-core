@@ -66,7 +66,11 @@ def retrieve_secret(secret_name: str) -> dict:
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
-        log.info(return_timing_object(service="secretsmanager", endpoint=f"client().get_secret_value({secret_name})", duration=duration(timer)))
+        log.info(return_timing_object(
+            service="secretsmanager",
+            endpoint=f"client().get_secret_value({secret_name})",
+            duration=duration(timer)
+        ))
     except ClientError as e:
         log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
         raise e
@@ -75,7 +79,7 @@ def retrieve_secret(secret_name: str) -> dict:
         # Depending on whether the secret is a string or binary, one of these fields will be populated.
         if 'SecretString' in get_secret_value_response:
             secret = json.loads(get_secret_value_response['SecretString'])
-            log.debug('ET for retrieving secret {} from secret store: {} sec'.format(secret_name, round(time() - t0, 4)))
+            log.debug(f'ET for retrieving secret {secret_name} from secret store: {time() - t0:.4f} sec')
             return secret
 
     return {}
@@ -119,7 +123,11 @@ def read_s3(bucket: str, key: str, s3: ServiceResource = None) -> str:
     log.debug('ET for reading {} from S3: {} sec'.format(key, round(time() - t0, 4)))
     timer = time()
     body = obj.get()['Body'].read().decode('utf-8')
-    log.info(return_timing_object(service="s3", endpoint=f"resource().Object(s3://{bucket}/{key}).get()", duration=duration(timer)))
+    log.info(return_timing_object(
+        service="s3",
+        endpoint=f"resource().Object(s3://{bucket}/{key}).get()",
+        duration=duration(timer)
+    ))
     return body
 
 
@@ -151,7 +159,8 @@ def get_role_creds(user_id: str = None, in_region: bool = False):
     """
     :param user_id: string with URS username
     :param in_region: boolean If True a download role that works only in region will be returned
-    :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and a security token)
+    :return: Returns a set of temporary security credentials (consisting of an access key ID, a secret access key, and
+        a security token)
     :return: Offset, in seconds for how long the STS session has been active
     """
     global sts  # pylint: disable=global-statement
@@ -176,7 +185,11 @@ def get_role_creds(user_id: str = None, in_region: bool = False):
 
     if user_id not in role_creds_cache[download_role_arn]:
         fresh_session = sts.assume_role(**session_params)
-        log.info(return_timing_object(service="sts", endpoint=f"client().assume_role({dl_arn_name}/{user_id})", duration=duration(now)))
+        log.info(return_timing_object(
+            service="sts",
+            endpoint=f"client().assume_role({dl_arn_name}/{user_id})",
+            duration=duration(now)
+        ))
         role_creds_cache[download_role_arn][user_id] = {"session": fresh_session, "timestamp": now}
     elif now - role_creds_cache[download_role_arn][user_id]["timestamp"] > 600:
         # If the session has been active for more than 10 minutes, grab a new one.
