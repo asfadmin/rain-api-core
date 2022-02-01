@@ -1,9 +1,6 @@
-import contextlib
-import stat
 import string
 from base64 import urlsafe_b64decode
 from http.cookies import CookieError, SimpleCookie
-from pathlib import Path
 from unittest import mock
 
 import boto3
@@ -30,16 +27,6 @@ from rain_api_core.view_util import (
 )
 
 MODULE = "rain_api_core.view_util"
-
-
-@contextlib.contextmanager
-def chmod(path: Path, mode: int):
-    old_mode = stat.S_IMODE(path.stat().st_mode)
-    path.chmod(mode)
-    try:
-        yield
-    finally:
-        path.chmod(old_mode)
 
 
 @pytest.fixture
@@ -136,27 +123,6 @@ def test_cache_html_templates_missing_template_dir(local_cachedir):
     del local_cachedir
 
     assert cache_html_templates() == "DEFAULT"
-
-
-@moto.mock_s3
-def test_cache_html_templates_wrong_folder_permissions(local_cachedir, monkeypatch):
-    bucket = "test_bucket"
-    templatedir = "templates"
-    filename = "template1.html"
-    contents = b"<html></html>"
-    client = boto3.client("s3")
-    client.create_bucket(Bucket=bucket)
-    client.put_object(Bucket=bucket, Key=f"{templatedir}/{filename}", Body=contents)
-
-    local_cachedir.mkdir()
-    monkeypatch.setenv("HTML_TEMPLATE_DIR", templatedir)
-    monkeypatch.setenv("CONFIG_BUCKET", bucket)
-
-    # TODO(reweeden): what is the expected behavior when there is a permissions error?
-    with pytest.raises(PermissionError):
-        # The permissions need to be reset after the test otherwise pytest won't be able to clean up
-        with chmod(local_cachedir, 0o400):
-            assert cache_html_templates() == "ERROR"
 
 
 def test_get_html_body(template_dir):
