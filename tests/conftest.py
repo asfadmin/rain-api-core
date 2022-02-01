@@ -7,6 +7,15 @@ import pytest
 from moto.core import patch_client, patch_resource
 
 logging.getLogger("rain_api_core").setLevel(logging.DEBUG)
+# Set up aws cli/boto configuration
+# This makes sure we don't accidentally touch real resources.
+# NOTE: This will persist beyond the pytest session,
+# however, the process should terminate immediately afterwards.
+os.environ["AWS_ACCESS_KEY_ID"] = "TEST_ACCESS_KEY_ID"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "TEST_SECRET_ACCESS_KEY"
+os.environ["AWS_SECURITY_TOKEN"] = "TEST_SECURITY_TOKEN"
+os.environ["AWS_SESSION_TOKEN"] = "TEST_SESSION_TOKEN"
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
 class MockBoto3Session(boto3.Session):
@@ -22,21 +31,6 @@ class MockBoto3Session(boto3.Session):
 
 
 boto3.session.Session = MockBoto3Session
-
-
-@pytest.fixture(scope="session", autouse=True)
-def aws_config():
-    """Set up aws cli/boto configuration
-
-    This makes sure we don't accidentally touch real resources.
-    """
-    # NOTE: This will persist beyond the pytest session,
-    # however, the process should terminate immediately afterwards.
-    os.environ["AWS_ACCESS_KEY_ID"] = "TEST_ACCESS_KEY_ID"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "TEST_SECRET_ACCESS_KEY"
-    os.environ["AWS_SECURITY_TOKEN"] = "TEST_SECURITY_TOKEN"
-    os.environ["AWS_SESSION_TOKEN"] = "TEST_SESSION_TOKEN"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
 @pytest.fixture(scope="module")
