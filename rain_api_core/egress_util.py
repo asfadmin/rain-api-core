@@ -1,35 +1,36 @@
-import logging
 import hmac
-from hashlib import sha256
+import logging
 import os
 import urllib
 from datetime import datetime
+from hashlib import sha256
 
 log = logging.getLogger(__name__)
 
 # This warning is stupid
 # pylint: disable=logging-fstring-interpolation
 
-def prepend_bucketname(name):
 
-    prefix = os.getenv('BUCKETNAME_PREFIX', "gsfc-ngap-{}-".format(os.getenv('MATURITY', 'DEV')[0:1].lower()))
-    return "{}{}".format(prefix, name)
+def prepend_bucketname(name: str) -> str:
+    prefix = os.getenv("BUCKETNAME_PREFIX")
+    if prefix is None:
+        maturity = os.getenv("MATURITY", "DEV")[0].lower()
+        prefix = f"gsfc-ngap-{maturity}-"
+    return f"{prefix}{name}"
 
 
-def hmacsha256(key, string):
-
+def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
     return hmac.new(key, string.encode('utf-8'), sha256)
 
 
-def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET'):
-
+def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET') -> str:
     timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     datez = timez[:8]
-    hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "."+region_name if region_name != "us-east-1" else "")
+    hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "." + region_name if region_name != "us-east-1" else "")
 
-    cred   = session['Credentials']['AccessKeyId']
+    cred = session['Credentials']['AccessKeyId']
     secret = session['Credentials']['SecretAccessKey']
-    token  = session['Credentials']['SessionToken']
+    token = session['Credentials']['SessionToken']
 
     aws4_request = "/".join([datez, region_name, "s3", "aws4_request"])
     cred_string = "{0}/{1}".format(cred, aws4_request)
@@ -46,18 +47,24 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     can_query_string = "&".join(parts)
 
     # Canonical Requst
-    can_req = method + "\n/" + object_name + "\n" + can_query_string + "\nhost:" + hostname + "\n\nhost\nUNSIGNED-PAYLOAD"
+    can_req = (
+        f"{method}\n"
+        f"/{object_name}\n"
+        f"{can_query_string}\n"
+        f"host:{hostname}\n\n"
+        "host\n"
+        "UNSIGNED-PAYLOAD"
+    )
     can_req_hash = sha256(can_req.encode('utf-8')).hexdigest()
 
     # String to Sign
     stringtosign = "\n".join(["AWS4-HMAC-SHA256", timez, aws4_request, can_req_hash])
 
     # Signing Key
-    StepOne =    hmacsha256( "AWS4{0}".format(secret).encode('utf-8'), datez).digest()
-    StepTwo =    hmacsha256( StepOne, region_name ).digest()
-    StepThree =  hmacsha256( StepTwo, "s3").digest()
-    SigningKey = hmacsha256( StepThree, "aws4_request").digest()
-
+    StepOne = hmacsha256("AWS4{0}".format(secret).encode('utf-8'), datez).digest()
+    StepTwo = hmacsha256(StepOne, region_name).digest()
+    StepThree = hmacsha256(StepTwo, "s3").digest()
+    SigningKey = hmacsha256(StepThree, "aws4_request").digest()
 
     # Final Signature
     Signature = hmacsha256(SigningKey, stringtosign).hexdigest()
@@ -67,56 +74,42 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     return url
 
 
-def get_bucket_dynamic_path(path_list, b_map):
+def get_bucket_dynamic_path(path_list: list, b_map: dict):
+    # Old and REVERSE format has no 'MAP'.
+    node = b_map.get("MAP", b_map)
 
-    # Old and REVERSE format has no 'MAP'. In either case, we don't want it fouling our dict.
-    if 'MAP' in b_map:
-        map_dict = b_map['MAP']
-    else:
-        map_dict = b_map
-
-    mapping = []
-
-    log.debug("Pathparts is {0}".format(", ".join(path_list)))
-    # walk the bucket map to see if this path is valid
-    for path_part in path_list:
+    log.debug("Pathparts is {}".format(path_list))
+    # Walk the bucket map to see if this path is valid
+    for i, path_part in enumerate(path_list):
         # Check if we hit a leaf of the YAML tree
-        if (mapping and isinstance(map_dict, str)) or 'bucket' in map_dict: #
-            customheaders = {}
-            if isinstance(map_dict, dict) and 'bucket' in map_dict:
-                bucketname = map_dict['bucket']
-                if 'headers' in map_dict:
-                    customheaders = map_dict['headers']
-            else:
-                bucketname = map_dict
+        if isinstance(node, str):
+            bucket = node
+            headers = {}
+        elif "bucket" in node:
+            bucket = node["bucket"]
+            headers = node.get("headers") or {}
 
-            log.debug(f'mapping: {mapping}')
-            # Pop mapping off path_list
-            for _ in mapping:
-                path_list.pop(0)
-
-            # Join the remaining bits together to form object_name
-            object_name = "/".join(path_list)
-            bucket_path = "/".join(mapping)
-
-            log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
-            return prepend_bucketname(bucketname), bucket_path, object_name, customheaders
-
-        if path_part in map_dict:
-            map_dict = map_dict[path_part]
-            mapping.append(path_part)
-            log.debug("Found {0}, Mapping is now {1}".format(path_part, "/".join(mapping)))
-
+        elif path_part in node:
+            node = node[path_part]
+            continue
         else:
-            log.warning("Could not find {0} in bucketmap".format(path_part))
-            log.debug('said bucketmap: {}'.format(map_dict))
-            return False, False, False, {}
+            log.warning("Could not find {} in bucketmap".format(path_part))
+            log.debug("bucketmap: {}".format(node))
+            break
 
-    # what? No path?
-    return False, False, False, {}
+        assert bucket is not None
+        # Split the path into bucket_name and object_name
+        head, tail = path_list[:i], path_list[i:]
+        bucket_path = "/".join(head)
+        object_name = "/".join(tail)
+
+        log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
+        return prepend_bucketname(bucket), bucket_path, object_name, headers
+
+    return None, None, None, {}
 
 
-def process_varargs(varargs: list, b_map: dict):
+def process_varargs(varargs: str, b_map: dict):
     """
     wrapper around process_request that returns legacy values to preserve backward compatibility
     :param varargs: a list with the path to the file requested.
@@ -128,60 +121,63 @@ def process_varargs(varargs: list, b_map: dict):
     return path, bucket, object_name
 
 
-def process_request(varargs, b_map):
-
-    varargs = varargs.split("/")
+def process_request(varargs: str, b_map: dict):
+    split_args = varargs.split("/")
 
     # Make sure we got at least 1 path, and 1 file name:
-    if len(varargs) < 2:
-        return "/".join(varargs), None, None, []
+    if len(split_args) < 2:
+        return varargs, None, None, {}
 
     # Watch for ASF-ish reverse URL mapping formats:
-    if len(varargs) == 3:
+    if len(split_args) == 3:
         if os.getenv('USE_REVERSE_BUCKET_MAP', 'FALSE').lower() == 'true':
-            varargs[0], varargs[1] = varargs[1], varargs[0]
+            split_args[0], split_args[1] = split_args[1], split_args[0]
 
     # Look up the bucket from path parts
-    bucket, path, object_name, headers = get_bucket_dynamic_path(varargs, b_map)
+    bucket, path, object_name, headers = get_bucket_dynamic_path(split_args, b_map)
 
     # If we didn't figure out the bucket, we don't know the path/object_name
     if not bucket:
-        object_name = varargs.pop(-1)
-        path = "/".join(varargs)
+        object_name = split_args.pop(-1)
+        path = "/".join(split_args)
 
     return path, bucket, object_name, headers
 
-def bucket_prefix_match(bucket_check, bucket_map, object_name=""):
+
+def bucket_prefix_match(bucket_check: str, bucket_map: str, object_name: str = "") -> bool:
+    # NOTE: https://github.com/asfadmin/thin-egress-app/issues/188
     log.debug(f"bucket_prefix_match(): checking if {bucket_check} matches {bucket_map} w/ optional obj '{object_name}'")
-    if bucket_check == bucket_map.split('/')[0] and object_name.startswith("/".join(bucket_map.split('/')[1:])):
+    prefix, *tail = bucket_map.split("/", 1)
+    if bucket_check == prefix and object_name.startswith("/".join(tail)):
         log.debug(f"Prefixed Bucket Map matched: s3://{bucket_check}/{object_name} => {bucket_map}")
         return True
     return False
 
 
 # Sort public/private buckets such that object-prefixes are processed FIRST
-def get_sorted_bucket_list(b_map, bucket_group):
+def get_sorted_bucket_list(b_map: dict, bucket_group: str) -> list:
     if bucket_group not in b_map:
         # But why?!
         log.warning(f"Bucket map does not contain bucket group '{bucket_group}'")
         return []
 
     # b_map[bucket_group] SHOULD be a dict, but list actually works too.
-    if  isinstance(b_map[bucket_group], dict):
-        return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True )
+    if isinstance(b_map[bucket_group], dict):
+        return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True)
     if isinstance(b_map[bucket_group], list):
-        return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True )
+        return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True)
 
     # Something went wrong.
     return []
 
-def check_private_bucket(bucket, b_map, object_name=""):
 
+def check_private_bucket(bucket: str, b_map: dict, object_name: str = ""):
     log.debug('check_private_buckets(): bucket: {}'.format(bucket))
 
     # Check public bucket file:
     if 'PRIVATE_BUCKETS' in b_map:
         # Prioritize prefixed buckets first, the deeper the better!
+        # TODO(reweeden): cache the sorted list (refactoring to object would be easiest)
         sorted_buckets = get_sorted_bucket_list(b_map, 'PRIVATE_BUCKETS')
         log.debug(f"Sorted PRIVATE buckets are {sorted_buckets}")
         for priv_bucket in sorted_buckets:
@@ -191,10 +187,11 @@ def check_private_bucket(bucket, b_map, object_name=""):
 
     return False
 
-def check_public_bucket(bucket, b_map, object_name=""):
 
+def check_public_bucket(bucket: str, b_map: dict, object_name: str = ""):
     # Check for PUBLIC_BUCKETS in bucket map file
     if 'PUBLIC_BUCKETS' in b_map:
+        # TODO(reweeden): cache the sorted list (refactoring to object would be easiest)
         sorted_buckets = get_sorted_bucket_list(b_map, 'PUBLIC_BUCKETS')
         log.debug(f"Sorted PUBLIC buckets are {sorted_buckets}")
         for pub_bucket in sorted_buckets:

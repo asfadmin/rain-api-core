@@ -1,31 +1,33 @@
-import logging
-import sys
+from unittest import mock
 
-import pytest
-from rain_api_core.general_util import CustomLogFilter
+from rain_api_core.general_util import duration, return_timing_object
 
-
-@pytest.fixture
-def logger(custom_log_handler):
-    log = logging.getLogger("test_logger")
-    log.addHandler(custom_log_handler)
-    return log
+MODULE = "rain_api_core.general_util"
 
 
-@pytest.fixture
-def custom_log_handler(custom_log_filter):
-    handler = logging.StreamHandler(sys.stdout)
-    handler.addFilter(custom_log_filter)
-    return handler
+def test_return_timing_object():
+    assert return_timing_object() == {
+        "timing": {
+            "service": "Unknown",
+            "endpoint": "Unknown",
+            "method": "GET",
+            "duration": 0,
+            "unit": "milliseconds"
+        }
+    }
+    assert return_timing_object(Service="some_service", OTHER_KEY="OTHER_VALUE") == {
+        "timing": {
+            "service": "some_service",
+            "endpoint": "Unknown",
+            "method": "GET",
+            "duration": 0,
+            "unit": "milliseconds",
+            "other_key": "OTHER_VALUE"
+        }
+    }
 
 
-@pytest.fixture
-def custom_log_filter():
-    return CustomLogFilter()
-
-
-def test_json_logging_exception(caplog, logger):
-    with caplog.at_level(logging.INFO):
-        logger.info(Exception("test_exception"))
-
-    assert caplog.records[0].msg == "test_exception"
+@mock.patch(f"{MODULE}.time.time")
+def test_duration(mock_time):
+    mock_time.return_value = 200.1111111
+    assert duration(100) == 100111.11
