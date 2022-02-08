@@ -1,4 +1,4 @@
-boto3==1.20.48
+boto3==1.20.51
 hypothesis==6.36.1
 moto==3.0.2
 pytest-cov==3.0.0
