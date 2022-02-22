@@ -1,7 +1,7 @@
 import hmac
 import logging
 import os
-import urllib
+import urllib.parse
 from datetime import datetime
 from hashlib import sha256
 
