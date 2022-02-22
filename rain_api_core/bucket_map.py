@@ -14,9 +14,27 @@ class BucketMapEntry():
     _access_control: Optional[dict]
 
     def is_accessible(self, groups: Iterable[str] = ()) -> bool:
+        """Check if the object is accessible with the given permissions."""
+
+        required_groups = self.get_required_groups()
+        # Check for public access
+        if required_groups is None:
+            return True
+
+        return not required_groups.isdisjoint(groups)
+
+    def get_required_groups(self) -> Optional[set]:
+        """Get a set of permissions protecting this object.
+
+        It is sufficient to have one of the permissions in the set in order to
+        access the object. Returns None if the object has public access.
+        Therefore, permissions can be checked by performing verifying that the
+        intersection of the permission set and the required permissions is
+        non-empty.
+        """
         if not self._access_control:
             # By default, buckets are completely locked down
-            return False
+            return set()
 
         # NOTE: Key order is important here. Most deeply nested keys need to be
         # checked first.
@@ -25,12 +43,11 @@ class BucketMapEntry():
                 continue
 
             if access is _PUBLIC:
-                return True
+                return None
 
-            if groups and not access.isdisjoint(groups):
-                return True
+            return access
 
-        return False
+        return set()
 
 
 class BucketMap():

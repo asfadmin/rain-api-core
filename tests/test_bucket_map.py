@@ -1,4 +1,32 @@
+import pytest
+
 from rain_api_core.bucket_map import BucketMap
+
+
+@pytest.fixture
+def sample_bucket_map():
+    # Modified from: https://github.com/asfadmin/thin-egress-app/issues/188
+    return {
+        "MAP": {
+            "INACCESSIBLE": "locked-bucket",
+            "general-browse": "browse-bucket",
+            "productX": "productX",
+            "nested": {
+                "nested2a": {
+                    "nested3": "nested-bucket-public"
+                },
+                "nested2b": "nested-bucket-private"
+            }
+        },
+        "PUBLIC_BUCKETS": {
+            "general-browse": "General browse Imagery",
+            "productX/browse": "ProductX Browse Imagery"
+        },
+        "PRIVATE_BUCKETS": {
+            "productX/2020/12": ["science_team"],
+            "nested/nested2b": []
+        }
+    }
 
 
 def test_get_simple():
@@ -95,30 +123,8 @@ def test_get_reverse():
     assert b_map.get("STAGE/PATH") is None
 
 
-def test_check_bucket_access():
-    # Modified from: https://github.com/asfadmin/thin-egress-app/issues/188
-    bucket_map = {
-        "MAP": {
-            "INACCESSIBLE": "locked-bucket",
-            "general-browse": "browse-bucket",
-            "productX": "productX",
-            "nested": {
-                "nested2a": {
-                    "nested3": "nested-bucket-public"
-                },
-                "nested2b": "nested-bucket-private"
-            }
-        },
-        "PUBLIC_BUCKETS": {
-            "general-browse": "General browse Imagery",
-            "productX/browse": "ProductX Browse Imagery"
-        },
-        "PRIVATE_BUCKETS": {
-            "productX/2020/12": ["science_team"],
-            "nested/nested2b": []
-        }
-    }
-    b_map = BucketMap(bucket_map)
+def test_check_bucket_access(sample_bucket_map):
+    b_map = BucketMap(sample_bucket_map)
 
     assert BucketMap({}).get("productX") is None
     assert b_map.get("productX") is None
@@ -131,6 +137,26 @@ def test_check_bucket_access():
     assert b_map.get("productX/2020/12/obj1").is_accessible(groups=["science_team"]) is True
     assert b_map.get("productX/2020/23/obj2").is_accessible(groups=["science_team"]) is False
     assert b_map.get("productX/2020/12/obj1").is_accessible() is False
+    assert b_map.get("nested/nested2b/obj1").is_accessible() is False
+
+
+def test_check_bucket_access_conflicting():
+    # When a bucket is configured to be both public and private
+    bucket_map = {
+        "MAP": {
+            "PATH": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "PATH"
+        ],
+        "PRIVATE_BUCKETS": {
+            "PATH": ["some_permission"]
+        }
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.get("PATH/obj1").is_accessible() is False
+    assert b_map.get("PATH/obj1").is_accessible(groups=["some_permission"]) is True
 
 
 def test_check_bucket_access_nested_paths():
@@ -194,3 +220,14 @@ def test_check_bucket_access_malformed():
 
     assert b_map._get_access_control("PATH") == {}
     assert b_map.get("PATH/obj1").is_accessible() is False
+
+
+def test_get_required_groups(sample_bucket_map):
+    b_map = BucketMap(sample_bucket_map)
+
+    assert b_map.get("productX/obj1").get_required_groups() == set()
+    assert b_map.get("INACCESSIBLE/obj1").get_required_groups() == set()
+    assert b_map.get("general-browse/obj1").get_required_groups() is None
+    assert b_map.get("productX/browse/obj1").get_required_groups() is None
+    assert b_map.get("productX/2020/12/obj1").get_required_groups() == {"science_team"}
+    assert b_map.get("productX/2020/23/obj2").get_required_groups() == set()
