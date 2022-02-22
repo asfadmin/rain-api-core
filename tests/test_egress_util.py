@@ -340,3 +340,25 @@ def test_check_public_bucket(monkeypatch):
     assert check_public_bucket("general-browse", bucket_map) is True
     assert check_public_bucket("productX", bucket_map) is False
     assert check_public_bucket("productX", bucket_map, "browse/obj1") is True
+
+
+def test_check_public_sub_directory(monkeypatch):
+    monkeypatch.setenv("BUCKETNAME_PREFIX", "")
+    bucket_map = {
+        "MAP": {
+            "productX": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "productX/foo/browse"
+        ],
+        "PRIVATE_BUCKETS": {
+            "productX/foo": ["some_permission"]
+        }
+    }
+
+    assert check_public_bucket("productX", {}) is False
+    assert check_public_bucket("productX", bucket_map) is False
+    assert check_public_bucket("productX", bucket_map, "foo/object1") is False
+    assert check_public_bucket("productX", bucket_map, "foo/browse/object1") is True
+
+    assert check_private_bucket("productX", bucket_map, "foo/object1") == ["some_permission"]
