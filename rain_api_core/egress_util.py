@@ -5,6 +5,8 @@ import urllib
 from datetime import datetime
 from hashlib import sha256
 
+from rain_api_core.bucket_map import BucketMap
+
 log = logging.getLogger(__name__)
 
 # This warning is stupid
@@ -12,11 +14,17 @@ log = logging.getLogger(__name__)
 
 
 def prepend_bucketname(name: str) -> str:
+    prefix = get_bucket_name_prefix()
+    return f"{prefix}{name}"
+
+
+def get_bucket_name_prefix() -> str:
     prefix = os.getenv("BUCKETNAME_PREFIX")
     if prefix is None:
         maturity = os.getenv("MATURITY", "DEV")[0].lower()
         prefix = f"gsfc-ngap-{maturity}-"
-    return f"{prefix}{name}"
+
+    return prefix
 
 
 def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
@@ -129,19 +137,21 @@ def process_request(varargs: str, b_map: dict):
         return varargs, None, None, {}
 
     # Watch for ASF-ish reverse URL mapping formats:
+    reverse = os.getenv('USE_REVERSE_BUCKET_MAP', 'FALSE').lower() == 'true'
     if len(split_args) == 3:
-        if os.getenv('USE_REVERSE_BUCKET_MAP', 'FALSE').lower() == 'true':
+        if reverse:
             split_args[0], split_args[1] = split_args[1], split_args[0]
 
     # Look up the bucket from path parts
-    bucket, path, object_name, headers = get_bucket_dynamic_path(split_args, b_map)
+    bucket_map = BucketMap(b_map, get_bucket_name_prefix(), reverse=reverse)
+    entry = bucket_map.get_path(split_args)
 
     # If we didn't figure out the bucket, we don't know the path/object_name
-    if not bucket:
+    if entry is None:
         object_name = split_args.pop(-1)
-        path = "/".join(split_args)
+        return "/".join(split_args), None, object_name, {}
 
-    return path, bucket, object_name, headers
+    return entry.bucket_path, entry.bucket, entry.object_key, entry.headers
 
 
 def bucket_prefix_match(bucket_check: str, bucket_map: str, object_name: str = "") -> bool:
