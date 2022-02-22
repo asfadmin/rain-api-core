@@ -173,9 +173,9 @@ def get_sorted_bucket_list(b_map: dict, bucket_group: str) -> list:
 
     # b_map[bucket_group] SHOULD be a dict, but list actually works too.
     if isinstance(b_map[bucket_group], dict):
-        return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True)
+        return sorted(b_map[bucket_group].keys(), key=lambda e: e.count("/"), reverse=True)
     if isinstance(b_map[bucket_group], list):
-        return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True)
+        return sorted(b_map[bucket_group], key=lambda e: e.count("/"), reverse=True)
 
     # Something went wrong.
     return []
