@@ -13,27 +13,34 @@ class BucketMapEntry():
     headers: dict
     _access_control: Optional[dict]
 
-    def is_accessible(self, groups: Iterable[str] = ()) -> bool:
-        """Check if the object is accessible with the given permissions."""
+    def is_accessible(self, groups: Iterable[str] = None) -> bool:
+        """Check if the object is accessible with the given permissions.
+
+        Setting `groups` to an iterable implies that the user has logged in,
+        which is different from setting it to None which implies public access
+        is needed.
+        """
 
         required_groups = self.get_required_groups()
         # Check for public access
         if required_groups is None:
             return True
 
-        return not required_groups.isdisjoint(groups)
+        # At this point public access is not allowed
+        if groups is None:
+            return False
+
+        return not required_groups or not required_groups.isdisjoint(groups)
 
     def get_required_groups(self) -> Optional[set]:
         """Get a set of permissions protecting this object.
 
         It is sufficient to have one of the permissions in the set in order to
-        access the object. Returns None if the object has public access.
-        Therefore, permissions can be checked by performing verifying that the
-        intersection of the permission set and the required permissions is
-        non-empty.
+        access the object. Returns None if the object has public access. An
+        empty set means any logged in user can access the object.
         """
         if not self._access_control:
-            # By default, buckets are completely locked down
+            # By default, buckets are accessible to any logged in users
             return set()
 
         # NOTE: Key order is important here. Most deeply nested keys need to be

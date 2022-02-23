@@ -8,7 +8,7 @@ def sample_bucket_map():
     # Modified from: https://github.com/asfadmin/thin-egress-app/issues/188
     return {
         "MAP": {
-            "INACCESSIBLE": "locked-bucket",
+            "ANY_AUTHED": "authed-bucket",
             "general-browse": "browse-bucket",
             "productX": "productX",
             "nested": {
@@ -130,14 +130,16 @@ def test_check_bucket_access(sample_bucket_map):
     assert b_map.get("productX") is None
 
     assert b_map.get("productX/obj1").is_accessible() is False
-    assert b_map.get("INACCESSIBLE/obj1").is_accessible() is False
+    assert b_map.get("ANY_AUTHED/obj1").is_accessible() is False
+    assert b_map.get("ANY_AUTHED/obj1").is_accessible(groups=[]) is True
     assert b_map.get("general-browse/obj1").is_accessible() is True
     assert b_map.get("general-browse/obj1").is_accessible(groups=["science_team"]) is True
     assert b_map.get("productX/browse/obj1").is_accessible() is True
     assert b_map.get("productX/2020/12/obj1").is_accessible(groups=["science_team"]) is True
-    assert b_map.get("productX/2020/23/obj2").is_accessible(groups=["science_team"]) is False
+    assert b_map.get("productX/2020/23/obj2").is_accessible(groups=["science_team"]) is True
     assert b_map.get("productX/2020/12/obj1").is_accessible() is False
     assert b_map.get("nested/nested2b/obj1").is_accessible() is False
+    assert b_map.get("nested/nested2b/obj1").is_accessible(groups=[]) is True
 
 
 def test_check_bucket_access_conflicting():
@@ -226,7 +228,7 @@ def test_get_required_groups(sample_bucket_map):
     b_map = BucketMap(sample_bucket_map)
 
     assert b_map.get("productX/obj1").get_required_groups() == set()
-    assert b_map.get("INACCESSIBLE/obj1").get_required_groups() == set()
+    assert b_map.get("ANY_AUTHED/obj1").get_required_groups() == set()
     assert b_map.get("general-browse/obj1").get_required_groups() is None
     assert b_map.get("productX/browse/obj1").get_required_groups() is None
     assert b_map.get("productX/2020/12/obj1").get_required_groups() == {"science_team"}
