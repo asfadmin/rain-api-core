@@ -301,45 +301,45 @@ def test_check_private_bucket(monkeypatch):
     bucket_map = {
         "MAP": {
             "general-browse": "browse-bucket",
-            "productX": "productX"
+            "productX": "bucket"
         },
         "PUBLIC_BUCKETS": {
-            "general-browse": "General browse Imagery",
-            "productX/browse": "ProductX Browse Imagery"
+            "browse-bucket": "General browse Imagery",
+            "bucket/browse": "ProductX Browse Imagery"
         },
         "PRIVATE_BUCKETS": {
-            "productX/2020/12": ["science_team"]
+            "bucket/2020/12": ["science_team"]
         }
     }
 
-    assert check_private_bucket("productX", {}) is False
-    assert check_private_bucket("productX", bucket_map) is False
-    assert check_private_bucket("general-browse", bucket_map) is False
-    assert check_private_bucket("productX", bucket_map, "browse/obj1") is False
-    assert check_private_bucket("productX", bucket_map, "2020/12/obj1") == ["science_team"]
+    assert check_private_bucket("bucket", {}) is False
+    assert check_private_bucket("bucket", bucket_map) is False
+    assert check_private_bucket("browse-bucket", bucket_map) is False
+    assert check_private_bucket("bucket", bucket_map, "browse/obj1") is False
+    assert check_private_bucket("bucket", bucket_map, "2020/12/obj1") == ["science_team"]
 
 
 def test_check_public_bucket(monkeypatch):
     monkeypatch.setenv("BUCKETNAME_PREFIX", "")
-    # Copied from: https://github.com/asfadmin/thin-egress-app/issues/188
+    # Modified from: https://github.com/asfadmin/thin-egress-app/issues/188
     bucket_map = {
         "MAP": {
             "general-browse": "browse-bucket",
-            "productX": "productX"
+            "productX": "bucket"
         },
         "PUBLIC_BUCKETS": {
-            "general-browse": "General browse Imagery",
-            "productX/browse": "ProductX Browse Imagery"
+            "browse-bucket": "General browse Imagery",
+            "bucket/browse": "ProductX Browse Imagery"
         },
         "PRIVATE_BUCKETS": {
-            "productX/2020/12": ["science_team"]
+            "bucket/2020/12": ["science_team"]
         }
     }
 
-    assert check_public_bucket("general-browse", {}) is False
-    assert check_public_bucket("general-browse", bucket_map) is True
-    assert check_public_bucket("productX", bucket_map) is False
-    assert check_public_bucket("productX", bucket_map, "browse/obj1") is True
+    assert check_public_bucket("browse-bucket", {}) is False
+    assert check_public_bucket("browse-bucket", bucket_map) is True
+    assert check_public_bucket("bucket", bucket_map) is False
+    assert check_public_bucket("bucket", bucket_map, "browse/obj1") is True
 
 
 def test_check_public_sub_directory(monkeypatch):
@@ -349,16 +349,16 @@ def test_check_public_sub_directory(monkeypatch):
             "productX": "bucket"
         },
         "PUBLIC_BUCKETS": [
-            "productX/foo/browse"
+            "bucket/foo/browse"
         ],
         "PRIVATE_BUCKETS": {
-            "productX/foo": ["some_permission"]
+            "bucket/foo": ["some_permission"]
         }
     }
 
-    assert check_public_bucket("productX", {}) is False
-    assert check_public_bucket("productX", bucket_map) is False
-    assert check_public_bucket("productX", bucket_map, "foo/object1") is False
-    assert check_public_bucket("productX", bucket_map, "foo/browse/object1") is True
+    assert check_public_bucket("bucket", {}) is False
+    assert check_public_bucket("bucket", bucket_map) is False
+    assert check_public_bucket("bucket", bucket_map, "foo/object1") is False
+    assert check_public_bucket("bucket", bucket_map, "foo/browse/object1") is True
 
-    assert check_private_bucket("productX", bucket_map, "foo/object1") == ["some_permission"]
+    assert check_private_bucket("bucket", bucket_map, "foo/object1") == ["some_permission"]

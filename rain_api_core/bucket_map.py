@@ -115,25 +115,28 @@ class BucketMap():
                 bucket_path=bucket_path,
                 object_key=object_key,
                 headers=headers or {},
-                _access_control=self._get_access_control(bucket_path)
+                # TODO(reweeden): Do we really want to be control access by
+                # bucket? Wouldn't it make more sense to control access by
+                # path instead?
+                _access_control=self._get_access_control(bucket)
             )
 
         return None
 
-    def _get_access_control(self, bucket_path: str) -> dict:
+    def _get_access_control(self, bucket: str) -> dict:
         # TODO(reweeden): Pre-parse this for the whole bucket map
         access_control = {}
-        num_parts = bucket_path.count("/") + 1
+        num_parts = bucket.count("/") + 1
 
         for entry in self._get_bucket_group("PUBLIC_BUCKETS"):
-            if entry.startswith(bucket_path):
+            if entry.startswith(bucket):
                 parts = entry.split("/")
                 key_prefix = "/".join(parts[num_parts:])
                 access_control[key_prefix] = _PUBLIC
 
         private_buckets = self.bucket_map.get("PRIVATE_BUCKETS", {})
         for entry in self._get_bucket_group("PRIVATE_BUCKETS"):
-            if entry.startswith(bucket_path):
+            if entry.startswith(bucket):
                 parts = entry.split("/")
                 key_prefix = "/".join(parts[num_parts:])
                 access_control[key_prefix] = set(private_buckets[entry])

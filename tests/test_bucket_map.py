@@ -10,7 +10,7 @@ def sample_bucket_map():
         "MAP": {
             "ANY_AUTHED": "authed-bucket",
             "general-browse": "browse-bucket",
-            "productX": "productX",
+            "productX": "bucket",
             "nested": {
                 "nested2a": {
                     "nested3": "nested-bucket-public"
@@ -19,12 +19,12 @@ def sample_bucket_map():
             }
         },
         "PUBLIC_BUCKETS": {
-            "general-browse": "General browse Imagery",
-            "productX/browse": "ProductX Browse Imagery"
+            "browse-bucket": "General browse Imagery",
+            "bucket/browse": "ProductX Browse Imagery"
         },
         "PRIVATE_BUCKETS": {
-            "productX/2020/12": ["science_team"],
-            "nested/nested2b": []
+            "bucket/2020/12": ["science_team"],
+            "nested-bucket-private": []
         }
     }
 
@@ -149,10 +149,10 @@ def test_check_bucket_access_conflicting():
             "PATH": "bucket"
         },
         "PUBLIC_BUCKETS": [
-            "PATH"
+            "bucket"
         ],
         "PRIVATE_BUCKETS": {
-            "PATH": ["some_permission"]
+            "bucket": ["some_permission"]
         }
     }
     b_map = BucketMap(bucket_map)
@@ -172,10 +172,10 @@ def test_check_bucket_access_nested_paths():
             }
         },
         "PUBLIC_BUCKETS": {
-            "nested/nested2a/nested3": "Public bucket in 'nested'"
+            "nested-bucket-public": "Public bucket in 'nested'"
         },
         "PRIVATE_BUCKETS": {
-            "nested/nested2b": ["science_team"]
+            "nested-bucket-private": ["science_team"]
         }
     }
     b_map = BucketMap(bucket_map)
@@ -196,10 +196,10 @@ def test_check_bucket_access_nested_prefixes():
             "PATH": "bucket"
         },
         "PUBLIC_BUCKETS": [
-            "PATH/foo/browse"
+            "bucket/foo/browse"
         ],
         "PRIVATE_BUCKETS": {
-            "PATH/foo": ["some_permission"]
+            "bucket/foo": ["some_permission"]
         }
     }
     b_map = BucketMap(bucket_map)
