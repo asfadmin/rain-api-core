@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
 
@@ -65,6 +66,7 @@ class BucketMap():
         reverse: bool = False
     ):
         self.bucket_map = bucket_map
+        self.access_control = _parse_access_control(bucket_map)
         self.bucket_name_prefix = bucket_name_prefix
         self.reverse = reverse
 
@@ -118,42 +120,51 @@ class BucketMap():
                 # TODO(reweeden): Do we really want to be control access by
                 # bucket? Wouldn't it make more sense to control access by
                 # path instead?
-                _access_control=self._get_access_control(bucket)
+                _access_control=self.access_control.get(bucket)
             )
 
         return None
 
-    def _get_access_control(self, bucket: str) -> dict:
-        # TODO(reweeden): Pre-parse this for the whole bucket map
-        access_control = {}
-        num_parts = bucket.count("/") + 1
 
-        for entry in self._get_bucket_group("PUBLIC_BUCKETS"):
-            if entry.startswith(bucket):
-                parts = entry.split("/")
-                key_prefix = "/".join(parts[num_parts:])
-                access_control[key_prefix] = _PUBLIC
+def _parse_access_control(bucket_map: dict) -> dict:
+    """Turn the access definitions into a dictionary of rules that should be
+    checked in order.
 
-        private_buckets = self.bucket_map.get("PRIVATE_BUCKETS", {})
-        for entry in self._get_bucket_group("PRIVATE_BUCKETS"):
-            if entry.startswith(bucket):
-                parts = entry.split("/")
-                key_prefix = "/".join(parts[num_parts:])
-                access_control[key_prefix] = set(private_buckets[entry])
+    The rules will be sorted by most deeply nested first. An example may look
+    like this:
 
-        return dict(access_control)
+    {
+        "bucket1": {
+            "key/foo/bar": _PUBLIC,
+            "key/bar/baz": {"group"},
+            "key": {"group2"}
+        },
+        "bucket2": {
+            "": _PUBLIC
+        },
+        "bucket3": {
+            "": {"group3"}
+        }
+    }
+    """
+    public_buckets = bucket_map.get("PUBLIC_BUCKETS", ())
+    private_buckets = bucket_map.get("PRIVATE_BUCKETS", {})
 
-    def _get_bucket_group(self, group: str) -> list:
-        obj = self.bucket_map.get(group)
-        if obj is None:
-            return []
+    try:
+        access_list = [(rule, _PUBLIC) for rule in public_buckets]
+    except TypeError:
+        access_list = []
+    access_list.extend((rule, set(groups)) for rule, groups in private_buckets.items())
 
-        # obj SHOULD be a dict, but any iterable actually works.
-        try:
-            return sorted(iter(obj), key=_num_parts, reverse=True)
-        except TypeError:
-            return []
+    # Relying on the fact that `sort` is stable. The order in which we add
+    # public/private rules to `access_list` is therefore important.
+    access_list.sort(key=lambda item: item[0].count("/"), reverse=True)
 
+    # Convert to dictionary for easier lookup on individual buckets
+    # We're relying on python's dictionary keys being insertion ordered
+    access = defaultdict(dict)
+    for (rule, obj) in access_list:
+        bucket, *prefix = rule.split("/", 1)
+        access[bucket]["".join(prefix)] = obj
 
-def _num_parts(key: str):
-    return key.count("/")
+    return dict(access)

@@ -211,6 +211,27 @@ def test_check_bucket_access_nested_prefixes():
     assert b_map.get("PATH/foo/browse/obj1").is_accessible() is True
 
 
+def test_check_bucket_access_depth():
+    bucket_map = {
+        "MAP": {
+            "PATH": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "bucket/browse"
+        ],
+        "PRIVATE_BUCKETS": {
+            "bucket/browse/foo": ["some_permission"]
+        }
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.get("PATH/obj1").is_accessible() is False
+    assert b_map.get("PATH/browse/foo/obj1").is_accessible() is False
+    assert b_map.get("PATH/browse/foo/obj1").is_accessible(groups=["some_permission"]) is True
+    assert b_map.get("PATH/browse/obj1").is_accessible(groups=["some_permission"]) is True
+    assert b_map.get("PATH/browse/obj1").is_accessible() is True
+
+
 def test_check_bucket_access_malformed():
     bucket_map = {
         "MAP": {
@@ -220,7 +241,6 @@ def test_check_bucket_access_malformed():
     }
     b_map = BucketMap(bucket_map)
 
-    assert b_map._get_access_control("PATH") == {}
     assert b_map.get("PATH/obj1").is_accessible() is False
 
 
