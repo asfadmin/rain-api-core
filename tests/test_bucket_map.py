@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 
 from rain_api_core.bucket_map import BucketMap
@@ -33,21 +35,40 @@ def test_get_simple():
     bucket_map = {
         "PATH": "bucket-name",
     }
-    b_map = BucketMap(bucket_map)
+    b_map = BucketMap(bucket_map, bucket_name_prefix="pre-")
 
     entry = b_map.get("PATH/obj1")
-    assert entry.bucket == "bucket-name"
+    assert entry.bucket == "pre-bucket-name"
     assert entry.bucket_path == "PATH"
     assert entry.object_key == "obj1"
     assert entry.headers == {}
 
     dir_entry = b_map.get("PATH/")
-    assert dir_entry.bucket == "bucket-name"
+    assert dir_entry.bucket == "pre-bucket-name"
     assert dir_entry.bucket_path == "PATH"
     assert dir_entry.object_key == ""
     assert dir_entry.headers == {}
 
     assert b_map.get("PATH") is None
+    assert b_map.get("NOT/VALID") is None
+
+
+@pytest.mark.parametrize(
+    "bucket_map",
+    (
+        {"foo": "bucket1"},
+        {"foo": {"bucket": "bucket1"}},
+        {"MAP": {"foo": {"bucket": "bucket1"}}}
+    )
+)
+def test_get_compatibility(bucket_map):
+    b_map = BucketMap(bucket_map)
+    entry = b_map.get("foo/bar")
+
+    assert entry.bucket == "bucket1"
+    assert entry.bucket_path == "foo"
+    assert entry.object_key == "bar"
+    assert entry.headers == {}
 
 
 def test_get_nested():
@@ -121,6 +142,39 @@ def test_get_reverse():
     assert dir_entry.object_key == ""
 
     assert b_map.get("STAGE/PATH") is None
+
+
+@pytest.mark.parametrize(
+    "bucket_map",
+    (
+        {"foo": "bucket1"},
+        {"foo": {"bucket": "bucket1"}},
+        {"MAP": {"foo": {"bucket": "bucket1"}}}
+    )
+)
+def test_get_path_compatibility(bucket_map):
+    # Using a tuple instead of a list to ensure the input is not modified
+    path_list = ["foo", "bar", "baz"]
+    original_path_list = list(path_list)
+    original_bucket_map = copy.deepcopy(bucket_map)
+
+    b_map = BucketMap(bucket_map)
+    entry = b_map.get_path(path_list)
+
+    assert entry.bucket == "bucket1"
+    assert entry.bucket_path == "foo"
+    assert entry.object_key == "bar/baz"
+    assert entry.headers == {}
+    # The input should not have been modified
+    assert path_list == original_path_list
+    assert bucket_map == original_bucket_map
+
+
+def test_get_path_nonexistent():
+    assert BucketMap({}).get_path([]) is None
+    assert BucketMap({"bar": "bucket1"}).get_path(["foo"]) is None
+    assert BucketMap({"foo": {}}).get_path(["foo"]) is None
+    assert BucketMap({"foo": {"qux":  "bucket1"}}).get_path(["foo", "bar"]) is None
 
 
 def test_check_bucket_access(sample_bucket_map):
