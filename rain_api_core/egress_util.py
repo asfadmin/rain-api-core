@@ -1,22 +1,22 @@
 import hmac
-import logging
 import os
-import urllib
+import urllib.parse
 from datetime import datetime
 from hashlib import sha256
 
-log = logging.getLogger(__name__)
-
-# This warning is stupid
-# pylint: disable=logging-fstring-interpolation
-
 
 def prepend_bucketname(name: str) -> str:
+    prefix = get_bucket_name_prefix()
+    return f"{prefix}{name}"
+
+
+def get_bucket_name_prefix() -> str:
     prefix = os.getenv("BUCKETNAME_PREFIX")
     if prefix is None:
         maturity = os.getenv("MATURITY", "DEV")[0].lower()
         prefix = f"gsfc-ngap-{maturity}-"
-    return f"{prefix}{name}"
+
+    return prefix
 
 
 def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
@@ -72,134 +72,3 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     # Dump URL
     url = "https://" + hostname + "/" + object_name + "?" + can_query_string + "&X-Amz-Signature=" + Signature
     return url
-
-
-def get_bucket_dynamic_path(path_list: list, b_map: dict):
-    # Old and REVERSE format has no 'MAP'.
-    node = b_map.get("MAP", b_map)
-
-    log.debug("Pathparts is {}".format(path_list))
-    # Walk the bucket map to see if this path is valid
-    for i, path_part in enumerate(path_list):
-        # Check if we hit a leaf of the YAML tree
-        if isinstance(node, str):
-            bucket = node
-            headers = {}
-        elif "bucket" in node:
-            bucket = node["bucket"]
-            headers = node.get("headers") or {}
-
-        elif path_part in node:
-            node = node[path_part]
-            continue
-        else:
-            log.warning("Could not find {} in bucketmap".format(path_part))
-            log.debug("bucketmap: {}".format(node))
-            break
-
-        assert bucket is not None
-        # Split the path into bucket_name and object_name
-        head, tail = path_list[:i], path_list[i:]
-        bucket_path = "/".join(head)
-        object_name = "/".join(tail)
-
-        log.info("Bucket mapping was {0}, object was {1}".format(bucket_path, object_name))
-        return prepend_bucketname(bucket), bucket_path, object_name, headers
-
-    return None, None, None, {}
-
-
-def process_varargs(varargs: str, b_map: dict):
-    """
-    wrapper around process_request that returns legacy values to preserve backward compatibility
-    :param varargs: a list with the path to the file requested.
-    :param b_map: bucket map
-    :return: path, bucket, object_name
-    """
-    log.warning('Deprecated process_varargs() called.')
-    path, bucket, object_name, _ = process_request(varargs, b_map)
-    return path, bucket, object_name
-
-
-def process_request(varargs: str, b_map: dict):
-    split_args = varargs.split("/")
-
-    # Make sure we got at least 1 path, and 1 file name:
-    if len(split_args) < 2:
-        return varargs, None, None, {}
-
-    # Watch for ASF-ish reverse URL mapping formats:
-    if len(split_args) == 3:
-        if os.getenv('USE_REVERSE_BUCKET_MAP', 'FALSE').lower() == 'true':
-            split_args[0], split_args[1] = split_args[1], split_args[0]
-
-    # Look up the bucket from path parts
-    bucket, path, object_name, headers = get_bucket_dynamic_path(split_args, b_map)
-
-    # If we didn't figure out the bucket, we don't know the path/object_name
-    if not bucket:
-        object_name = split_args.pop(-1)
-        path = "/".join(split_args)
-
-    return path, bucket, object_name, headers
-
-
-def bucket_prefix_match(bucket_check: str, bucket_map: str, object_name: str = "") -> bool:
-    # NOTE: https://github.com/asfadmin/thin-egress-app/issues/188
-    log.debug(f"bucket_prefix_match(): checking if {bucket_check} matches {bucket_map} w/ optional obj '{object_name}'")
-    prefix, *tail = bucket_map.split("/", 1)
-    if bucket_check == prefix and object_name.startswith("/".join(tail)):
-        log.debug(f"Prefixed Bucket Map matched: s3://{bucket_check}/{object_name} => {bucket_map}")
-        return True
-    return False
-
-
-# Sort public/private buckets such that object-prefixes are processed FIRST
-def get_sorted_bucket_list(b_map: dict, bucket_group: str) -> list:
-    if bucket_group not in b_map:
-        # But why?!
-        log.warning(f"Bucket map does not contain bucket group '{bucket_group}'")
-        return []
-
-    # b_map[bucket_group] SHOULD be a dict, but list actually works too.
-    if isinstance(b_map[bucket_group], dict):
-        return sorted(list(b_map[bucket_group].keys()), key=lambda e: e.count("/"), reverse=True)
-    if isinstance(b_map[bucket_group], list):
-        return sorted(list(b_map[bucket_group]), key=lambda e: e.count("/"), reverse=True)
-
-    # Something went wrong.
-    return []
-
-
-def check_private_bucket(bucket: str, b_map: dict, object_name: str = ""):
-    log.debug('check_private_buckets(): bucket: {}'.format(bucket))
-
-    # Check public bucket file:
-    if 'PRIVATE_BUCKETS' in b_map:
-        # Prioritize prefixed buckets first, the deeper the better!
-        # TODO(reweeden): cache the sorted list (refactoring to object would be easiest)
-        sorted_buckets = get_sorted_bucket_list(b_map, 'PRIVATE_BUCKETS')
-        log.debug(f"Sorted PRIVATE buckets are {sorted_buckets}")
-        for priv_bucket in sorted_buckets:
-            if bucket_prefix_match(bucket, prepend_bucketname(priv_bucket), object_name):
-                # This bucket is PRIVATE, return group!
-                return b_map['PRIVATE_BUCKETS'][priv_bucket]
-
-    return False
-
-
-def check_public_bucket(bucket: str, b_map: dict, object_name: str = ""):
-    # Check for PUBLIC_BUCKETS in bucket map file
-    if 'PUBLIC_BUCKETS' in b_map:
-        # TODO(reweeden): cache the sorted list (refactoring to object would be easiest)
-        sorted_buckets = get_sorted_bucket_list(b_map, 'PUBLIC_BUCKETS')
-        log.debug(f"Sorted PUBLIC buckets are {sorted_buckets}")
-        for pub_bucket in sorted_buckets:
-            if bucket_prefix_match(bucket, prepend_bucketname(pub_bucket), object_name):
-                # This bucket is public!
-                log.debug("found a public, we'll take it")
-                return True
-
-    # Did not find this in public bucket list
-    log.debug('we did not find a public bucket for {}'.format(bucket))
-    return False
