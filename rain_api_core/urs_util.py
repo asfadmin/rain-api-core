@@ -7,6 +7,7 @@ from time import time
 from rain_api_core.aws_util import retrieve_secret
 from rain_api_core.general_util import duration, return_timing_object
 from rain_api_core.logging import log_context
+from rain_api_core.timer import Timer
 from rain_api_core.view_util import JWT_COOKIE_NAME, get_exp_time, make_set_cookie_headers_jwt
 
 log = logging.getLogger(__name__)
@@ -43,22 +44,26 @@ def do_auth(code: str, redirect_url: str, aux_headers: dict = None) -> dict:
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
-    t0 = time()
+    timer = Timer()
+    timer.mark("do_auth() urlopen()")
     try:
         log.debug('headers: {}'.format(headers))
         log.debug('url: {}'.format(url))
         log.debug('post_data: {}'.format(post_data))
 
         response = urllib.request.urlopen(post_request)  # nosec URL is *always* URS.
-        t1 = time()
+        timer.mark("do_auth() request to URS")
         packet = response.read()
-        log.debug('ET to do_auth() urlopen(): {} sec'.format(t1 - t0))
-        log.debug('ET to do_auth() request to URS: {} sec'.format(time() - t0))
-        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=duration(t0)))
+        timer.mark()
+
+        timer.log_all(log)
+        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=timer.total.duration()))
+
         return json.loads(packet)
     except urllib.error.URLError as e:
-        log.error("Error fetching auth: {0}".format(e))
-        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
+        log.error("Error fetching auth: %s", e)
+        timer.mark()
+        log.debug("ET for the attempt: %.4f", timer.total.duration())
         return {}
 
 
@@ -148,25 +153,30 @@ def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict 
     post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
     post_request = urllib.request.Request(url, post_data_encoded, headers)
 
-    t0 = time()
+    timer = Timer()
+    timer.mark("get_new_token_and_profile() urlopen()")
     try:
         log.info("Attempting to get new Token")
 
-        response = urllib.request.urlopen(post_request)                              # nosec URL is *always* URS.
-        t1 = time()
+        response = urllib.request.urlopen(post_request)  # nosec URL is *always* URS.
+
+        timer.mark("get_new_token_and_profile() response.read()")
         packet = response.read()
-        log.info(return_timing_object(service="EDL", endpoint=url, duration=duration(t0)))
+
+        timer.mark("get_new_token_and_profile() json.loads()")
+        log.info(return_timing_object(service="EDL", endpoint=url, duration=timer.total.duration()))
         new_token = json.loads(packet)['access_token']
-        t2 = time()
+        timer.mark()
+
         log.info("Retrieved new token: {0}".format(new_token))
-        log.debug('ET for get_new_token_and_profile() urlopen() {} sec'.format(t1 - t0))
-        log.debug('ET for get_new_token_and_profile() response.read() and json.loads() {} sec'.format(t2 - t1))
+        timer.log_all(log)
         # Get user profile with new token
         return get_profile(user_id, cookietoken, new_token, aux_headers=aux_headers)
 
     except urllib.error.URLError as e:
-        log.error("Error fetching auth: {0}".format(e))
-        log.debug('ET for the attempt: {}'.format(format(round(time() - t0, 4))))
+        log.error("Error fetching auth: %s", e)
+        timer.mark()
+        log.debug("ET for the attempt: %.4f", timer.total.duration())
         return False
 
 
