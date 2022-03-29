@@ -35,6 +35,18 @@ class UserProfile:
             exp=payload.get('exp')
         )
 
+    def to_jwt_payload(self):
+        return {
+            'urs-user-id': self.user_id,
+            'urs-access-token': self.token,
+            'urs-groups': self.groups,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'email': self.email,
+            'iat': self.iat,
+            'exp': self.exp,
+        }
+
 
 class JwtManager:
     def __init__(
