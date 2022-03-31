@@ -35,6 +35,96 @@ JWT_COOKIE_NAME = os.getenv('JWT_COOKIENAME', 'asf-urs')
 JWT_BLACKLIST = {}
 
 
+class TemplateManager:
+    def __init__(
+        self,
+        bucket: str,
+        template_dir: str,
+        cache_dir: str = HTML_TEMPLATE_LOCAL_CACHEDIR,
+    ):
+        self.cache_dir = cache_dir
+        self.bucket = bucket
+        self.template_dir = template_dir
+        self.jinja_env = Environment(
+            loader=FileSystemLoader([
+                self.cache_dir,
+                HTML_TEMPLATE_PROJECT_DIR,
+                # For legacy compatibility with projects that don't install
+                # this module with pip and rely on this behavior
+                os.path.join(os.path.dirname(__file__), '../', 'templates')
+            ]),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
+        self._downloaded = False
+
+    def download_templates(self):
+        """Download all files from an S3 directory to the local cache folder"""
+        try:
+            os.mkdir(self.cache_dir, 0o700)
+        except FileExistsError:
+            log.debug('%s already exists', self.cache_dir)
+
+        if not self.bucket or not self.template_dir:
+            return
+
+        template_dir = self.template_dir
+        if not template_dir.endswith('/'):
+            template_dir = f'{template_dir}/'
+
+        # For logging
+        s3_uri = f's3://{self.bucket}/{template_dir}'
+
+        try:
+            start = time()
+            client = botoclient('s3')
+            result = client.list_objects(
+                Bucket=self.bucket,
+                Prefix=template_dir,
+                Delimiter='/'
+            )
+            log.info(return_timing_object(
+                service='s3',
+                endpoint=f'client().list_objects({s3_uri})',
+                duration=duration(start)
+            ))
+
+            download_start = time()
+            for entry in result.get('Contents', []):
+                key = entry['Key']
+                filename = os.path.basename(key)
+                if not filename:
+                    continue
+
+                local_path = os.path.join(self.cache_dir, filename)
+                log.debug('attempting to save %s', local_path)
+
+                start = time()
+                client.download_file(self.bucket, key, local_path)
+                log.info(return_timing_object(
+                    service='s3',
+                    endpoint=f'client().download_file({s3_uri}/{key})',
+                    duration=duration(start)
+                ))
+
+            log.debug('ET for download_templates: %.4fs', time() - download_start)
+        except Exception:
+            log.warning('Failed to download HTML templates from %s', s3_uri, exc_info=True)
+        finally:
+            self._downloaded = True
+
+    def render(self, template_name: str = 'root.html', *args, **kwargs) -> str:
+        if not self._downloaded:
+            self.download_templates()
+
+        try:
+            template = self.jinja_env.get_template(template_name)
+        except TemplateNotFound as e:
+            log.error('Template not found: %s', e)
+            return 'Cannot find the HTML template directory'
+
+        return template.render(*args, **kwargs)
+
+
 @functools.lru_cache(maxsize=None)
 def get_jwt_keys() -> dict:
     raw_keys = retrieve_secret(os.getenv('JWT_KEY_SECRET_NAME', ''))
@@ -43,73 +133,6 @@ def get_jwt_keys() -> dict:
         k: base64.b64decode(v.encode('utf-8'))
         for k, v in raw_keys.items()
     }
-
-
-def cache_html_templates() -> str:
-    try:
-        os.mkdir(HTML_TEMPLATE_LOCAL_CACHEDIR, 0o700)
-    except FileExistsError:
-        # good.
-        log.debug('somehow, {} exists already'.format(HTML_TEMPLATE_LOCAL_CACHEDIR))
-
-    templatedir = os.getenv('HTML_TEMPLATE_DIR')
-    if not templatedir:
-        return 'DEFAULT'
-
-    bucket = os.getenv('CONFIG_BUCKET')
-    if not templatedir.endswith('/'):  # we need a trailing slash
-        templatedir = f'{templatedir}/'
-
-    timer = time()
-    client = botoclient('s3')
-    try:
-        result = client.list_objects(Bucket=bucket, Prefix=templatedir, Delimiter='/')
-        log.info(return_timing_object(
-            service="s3",
-            endpoint=f"client().list_objects(s3://{bucket}/{templatedir}/)",
-            duration=duration(timer)
-        ))
-
-        for o in result.get('Contents'):
-            filename = os.path.basename(o['Key'])
-            if filename:
-                log.debug('attempting to save {}'.format(os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename)))
-                timer = time()
-                client.download_file(bucket, o['Key'], os.path.join(HTML_TEMPLATE_LOCAL_CACHEDIR, filename))
-                log.info(return_timing_object(
-                    service="s3",
-                    endpoint=f"client().download_file(s3://{bucket}/{o['Key']})",
-                    duration=duration(timer)
-                ))
-        return 'CACHED'
-    except (TypeError, KeyError) as e:
-        log.error(e)
-        log.error('Trouble trying to download HTML templates from s3://{}/{}'.format(bucket, templatedir))
-        return 'ERROR'
-
-
-def get_html_body(template_vars: dict, templatefile: str = 'root.html') -> str:
-    global HTML_TEMPLATE_STATUS  # pylint: disable=global-statement
-
-    if HTML_TEMPLATE_STATUS == '':
-        HTML_TEMPLATE_STATUS = cache_html_templates()
-
-    jin_env = Environment(
-        loader=FileSystemLoader([
-            HTML_TEMPLATE_LOCAL_CACHEDIR,
-            HTML_TEMPLATE_PROJECT_DIR,
-            # For legacy compatibility with projects that don't install this module with pip and rely on this behavior
-            os.path.join(os.path.dirname(__file__), '../', "templates")
-        ]),
-        autoescape=select_autoescape(['html', 'xml'])
-    )
-    try:
-        template = jin_env.get_template(templatefile)
-    except TemplateNotFound as e:
-        log.error('Template not found: {}'.format(e))
-        return 'Cannot find the HTML template directory'
-
-    return template.render(**template_vars)
 
 
 def get_cookie_vars(headers: dict) -> dict:

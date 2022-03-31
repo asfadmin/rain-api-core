@@ -4,7 +4,6 @@ from http.cookies import CookieError, SimpleCookie
 from unittest import mock
 
 import boto3
-import botocore
 import jwt
 import moto
 import pytest
@@ -12,13 +11,12 @@ from hypothesis import assume, given, note
 from hypothesis import strategies as st
 
 from rain_api_core.view_util import (
-    cache_html_templates,
+    TemplateManager,
     decode_jwt_payload,
     get_cookie_expiration_date_str,
     get_cookie_vars,
     get_cookies,
     get_exp_time,
-    get_html_body,
     get_jwt_keys,
     is_jwt_blacklisted,
     make_jwt_payload,
@@ -74,76 +72,81 @@ def test_get_jwt_keys_error(mock_retrieve_secret):
 
 
 @moto.mock_s3
-def test_cache_html_templates(local_cachedir, monkeypatch):
+def test_download_templates(local_cachedir):
     bucket = "test_bucket"
-    templatedir = "templates"
+    template_dir = "templates/"
     filenames = ["template1.html", "template2.html"]
     contents = b"<html></html>"
     client = boto3.client("s3")
     client.create_bucket(Bucket=bucket)
     for filename in filenames:
-        client.put_object(Bucket=bucket, Key=f"{templatedir}/{filename}", Body=contents)
+        client.put_object(Bucket=bucket, Key=f"{template_dir}{filename}", Body=contents)
 
-    monkeypatch.setenv("HTML_TEMPLATE_DIR", templatedir)
-    monkeypatch.setenv("CONFIG_BUCKET", bucket)
+    manager = TemplateManager(bucket, template_dir, cache_dir=str(local_cachedir))
+    manager.download_templates()
 
-    assert cache_html_templates() == "CACHED"
     for filename in filenames:
         with open(local_cachedir / filename, "rb") as f:
             assert f.read() == contents
 
 
 @moto.mock_s3
-def test_cache_html_templates_none_available(local_cachedir, monkeypatch):
-    del local_cachedir
-
+def test_download_templates_none_available(local_cachedir):
     bucket = "test_bucket"
     client = boto3.client("s3")
     client.create_bucket(Bucket=bucket)
 
-    monkeypatch.setenv("HTML_TEMPLATE_DIR", "templates")
-    monkeypatch.setenv("CONFIG_BUCKET", bucket)
+    manager = TemplateManager(bucket, "templates", cache_dir=str(local_cachedir))
+    manager.download_templates()
 
-    assert cache_html_templates() == "ERROR"
-
-
-@moto.mock_s3
-def test_cache_html_templates_missing_bucket(local_cachedir, monkeypatch):
-    del local_cachedir
-
-    monkeypatch.setenv("HTML_TEMPLATE_DIR", "templates")
-    monkeypatch.setenv("CONFIG_BUCKET", "does_not_exist")
-
-    with pytest.raises(botocore.exceptions.ClientError):
-        cache_html_templates()
+    assert list(local_cachedir.iterdir()) == []
 
 
 @moto.mock_s3
-def test_cache_html_templates_missing_template_dir(local_cachedir):
-    del local_cachedir
+def test_download_templates_missing_bucket(local_cachedir):
+    manager = TemplateManager("does_not_exist", "templates", cache_dir=local_cachedir)
+    manager.download_templates()
 
-    assert cache_html_templates() == "DEFAULT"
+    assert list(local_cachedir.iterdir()) == []
 
 
-def test_get_html_body(template_dir):
-    del template_dir
+@moto.mock_s3
+def test_download_templates_missing_template_dir(local_cachedir):
+    manager = TemplateManager("does_not_exist", "", cache_dir=local_cachedir)
+    manager.download_templates()
 
-    rendered = get_html_body({"body": "Hello World!"}, "test.html")
+    assert list(local_cachedir.iterdir()) == []
+
+
+def test_render(template_dir):
+    manager = TemplateManager("", "", cache_dir=template_dir)
+
+    rendered = manager.render("test.html", {"body": "Hello World!"})
     assert "Hello World!" in rendered
 
 
-def test_get_html_body_missing_template(template_dir):
-    del template_dir
+def test_render_missing_template(template_dir):
+    manager = TemplateManager("", "", cache_dir=template_dir)
 
-    rendered = get_html_body({"body": "Hello World!"}, "does_not_exist.html")
+    rendered = manager.render("does_not_exist.html", {"body": "Hello World!"})
     assert rendered == "Cannot find the HTML template directory"
 
 
-@mock.patch(f"{MODULE}.cache_html_templates", autospec=True)
-def test_get_html_body_load_templates(mock_cache_html_templates):
-    get_html_body({})
+@moto.mock_s3
+def test_render_wait_for_templates(local_cachedir):
+    bucket = "test_bucket"
+    template_dir = "templates/"
+    filenames = ["template1.html", "template2.html"]
+    contents = b"<html>{{ body }}</html>"
+    client = boto3.client("s3")
+    client.create_bucket(Bucket=bucket)
+    for filename in filenames:
+        client.put_object(Bucket=bucket, Key=f"{template_dir}{filename}", Body=contents)
 
-    mock_cache_html_templates.assert_called_once()
+    manager = TemplateManager(bucket, template_dir, cache_dir=local_cachedir)
+
+    rendered = manager.render("template1.html", {"body": "Hello World!"})
+    assert "Hello World!" in rendered
 
 
 @mock.patch(f"{MODULE}.get_cookies", autospec=True)
