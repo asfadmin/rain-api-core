@@ -145,7 +145,7 @@ def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: di
             f"We got that 401 above and we're using a temptoken ({temptoken}), "
             "so giving up and not getting a profile."
         )
-    return {}
+    return None
 
 
 def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict = None):
@@ -188,7 +188,7 @@ def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict 
         log.error("Error fetching auth: %s", e)
         timer.mark()
         log.debug("ET for the attempt: %.4f", timer.total.duration())
-        return False
+        return None
 
 
 def user_in_group_list(private_groups: list, user_groups: list) -> bool:
@@ -333,18 +333,15 @@ def do_login(args, context, jwt_manager: JwtManager, cookie_domain='', aux_heade
 
     user_profile = get_profile(user_id, auth['access_token'], aux_headers={})
     log.debug('Got the user profile: {}'.format(user_profile))
-    if user_profile:
+    if user_profile is not None:
         log.debug('urs-access-token: {}'.format(auth['access_token']))
         if 'state' in args:
             redirect_to = args["state"]
         else:
             redirect_to = get_base_url(context)
 
-        if 'user_groups' not in user_profile:
-            user_profile['user_groups'] = []
-
         headers = {'Location': redirect_to}
-        headers.update(jwt_manager.get_header_to_set_auth_cookie(UserProfile, cookie_domain))
+        headers.update(jwt_manager.get_header_to_set_auth_cookie(user_profile, cookie_domain))
         return 301, {}, headers
 
     template_vars = {'contentstring': 'Could not get user profile from URS', 'title': 'Could Not Login'}

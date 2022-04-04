@@ -34,6 +34,20 @@ def context():
     }
 
 
+@pytest.fixture
+def user_profile():
+    return UserProfile(
+        user_id='test_user',
+        first_name='John',
+        last_name='Smith',
+        email='j.smith@email.com',
+        groups=[],
+        token='test_token',
+        iat=0,
+        exp=0
+    )
+
+
 def test_get_base_url(monkeypatch):
     monkeypatch.setenv("DOMAIN_NAME", "example.com")
     assert get_base_url() == "https://example.com/"
@@ -138,7 +152,7 @@ def test_get_profile_error(mock_get_new_token_and_profile, mock_request):
     mock_get_new_token_and_profile.return_value = {"foo": "bar"}
     mock_request.urlopen.side_effect = urllib.error.URLError("test error")
 
-    assert get_profile("user_id", "token", "temptoken") == {}
+    assert get_profile("user_id", "token", "temptoken") is None
     mock_get_new_token_and_profile.assert_not_called()
 
     assert get_profile("user_id", "token") == {"foo": "bar"}
@@ -166,7 +180,7 @@ def test_get_new_token_and_profile_error(mock_get_urs_creds, mock_get_profile, m
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
     mock_request.urlopen.side_effect = urllib.error.URLError("test error")
 
-    assert get_new_token_and_profile("user_id", "cookietoken") is False
+    assert get_new_token_and_profile("user_id", "cookietoken") is None
     mock_get_profile.assert_not_called()
 
 
@@ -277,15 +291,15 @@ def test_do_login(
         mock_get_header_to_set_auth_cookie,
         mock_get_profile,
         mock_do_auth,
-        context
+        context,
+        user_profile
 ):
     mock_do_auth.return_value = {
         "endpoint": "ENDPOINT",
         "access_token": "ACCESS_TOKEN"
     }
-    mock_get_profile.return_value = {
-        "user_groups": ["GROUP_1"]
-    }
+    user_profile.groups = ['GROUP_1']
+    mock_get_profile.return_value = user_profile
     mock_get_header_to_set_auth_cookie.return_value = {
         "SET-COOKIE": "foo=bar"
     }
@@ -316,17 +330,6 @@ def test_do_login(
         }
     )
 
-    mock_get_profile.return_value = {
-        "foo": "bar"
-    }
-    assert do_login(args, context, jwt_manager) == (
-        301,
-        {},
-        {
-            "Location": "https://somewhere-else.com",
-            "SET-COOKIE": "foo=bar"
-        }
-    )
 
 
 @mock.patch(f"{MODULE}.do_auth", autospec=True)
@@ -351,7 +354,7 @@ def test_do_login_failed_profile(mock_get_profile, mock_do_auth, context):
         "endpoint": "ENDPOINT",
         "access_token": "ACCESS_TOKEN"
     }
-    mock_get_profile.return_value = {}
+    mock_get_profile.return_value = None
     jwt_manager = JwtManager('algorithm', 'pub_key', 'priv_key', 'cookie-name')
 
     assert do_login({"code": "URS_CODE"}, context, jwt_manager) == (
