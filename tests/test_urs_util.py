@@ -331,7 +331,6 @@ def test_do_login(
     )
 
 
-
 @mock.patch(f"{MODULE}.do_auth", autospec=True)
 def test_do_login_failed_auth(mock_do_auth, context):
     mock_do_auth.return_value = {}
