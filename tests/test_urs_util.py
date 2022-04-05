@@ -1,8 +1,10 @@
+import json
 import urllib
 from unittest import mock
 
 import pytest
 
+from rain_api_core.auth import JwtManager, UserProfile
 from rain_api_core.urs_util import (
     do_auth,
     do_login,
@@ -14,8 +16,7 @@ from rain_api_core.urs_util import (
     get_urs_url,
     user_in_group,
     user_in_group_list,
-    user_in_group_urs,
-    user_profile_2_jwt_payload
+    user_in_group_urs
 )
 
 MODULE = "rain_api_core.urs_util"
@@ -31,6 +32,20 @@ def context():
         "domainName": "example.com",
         "stage": "DEV"
     }
+
+
+@pytest.fixture
+def user_profile():
+    return UserProfile(
+        user_id='test_user',
+        first_name='John',
+        last_name='Smith',
+        email='j.smith@email.com',
+        groups=[],
+        token='test_token',
+        iat=0,
+        exp=0
+    )
 
 
 def test_get_base_url(monkeypatch):
@@ -110,13 +125,25 @@ def test_get_urs_url(mock_get_urs_creds, context):
 @mock.patch(f"{MODULE}.urllib.request", autospec=True)
 def test_get_profile(mock_request):
     mock_response = mock.NonCallableMock()
-    mock_response.read.return_value = '{"foo": "bar"}'
+    mock_response.read.return_value = json.dumps(
+        {
+            "uid": "user_id",
+            "first_name": "John",
+            "last_name": "Smith",
+            "email_address": "peter.l.smith@nasa.gov",
+            "user_groups": []
+        }
+    )
     mock_request.urlopen.return_value = mock_response
 
-    assert get_profile("user_id", "token") == {"foo": "bar"}
-    assert get_profile("user_id", "token", "temptoken") == {"foo": "bar"}
-    assert get_profile(None, "token") == {}
-    assert get_profile("user_id", None) == {}
+    profile = get_profile("user_id", "token")
+    assert profile.user_id == "user_id"
+    assert profile.first_name == "John"
+
+    profile = get_profile("user_id", "token", "temptoken")
+    assert profile.user_id == "user_id"
+    assert get_profile(None, "token") is None
+    assert get_profile("user_id", None) is None
 
 
 @mock.patch(f"{MODULE}.urllib.request", autospec=True)
@@ -125,7 +152,7 @@ def test_get_profile_error(mock_get_new_token_and_profile, mock_request):
     mock_get_new_token_and_profile.return_value = {"foo": "bar"}
     mock_request.urlopen.side_effect = urllib.error.URLError("test error")
 
-    assert get_profile("user_id", "token", "temptoken") == {}
+    assert get_profile("user_id", "token", "temptoken") is None
     mock_get_new_token_and_profile.assert_not_called()
 
     assert get_profile("user_id", "token") == {"foo": "bar"}
@@ -153,7 +180,7 @@ def test_get_new_token_and_profile_error(mock_get_urs_creds, mock_get_profile, m
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
     mock_request.urlopen.side_effect = urllib.error.URLError("test error")
 
-    assert get_new_token_and_profile("user_id", "cookietoken") is False
+    assert get_new_token_and_profile("user_id", "cookietoken") is None
     mock_get_profile.assert_not_called()
 
 
@@ -202,11 +229,20 @@ def test_user_in_group_urs(mock_get_profile, mock_user_in_group_list):
 def test_user_in_group(mock_user_in_group_list):
     mock_user_in_group_list.return_value = True
 
-    assert user_in_group([], {}) == (False, {})
+    user = UserProfile(
+        user_id='test_user_id',
+        token='test_token',
+        groups=[],
+        first_name='test_first_name',
+        last_name='test_last_name',
+        email='test_email',
+    )
+
+    assert user_in_group([], {}) == (False, None)
     mock_user_in_group_list.assert_not_called()
-    assert user_in_group(["GROUP_1"], {"asf-urs": {}}) == (False, {})
+    assert user_in_group(["GROUP_1"], None) == (False, None)
     mock_user_in_group_list.assert_not_called()
-    assert user_in_group(["GROUP_1"], {"asf-urs": {"urs-groups": []}}) == (True, {})
+    assert user_in_group(["GROUP_1"], user) == (True, None)
     mock_user_in_group_list.assert_called_once()
 
 
@@ -214,20 +250,21 @@ def test_user_in_group(mock_user_in_group_list):
 @mock.patch(f"{MODULE}.get_profile", autospec=True)
 def test_user_in_group_refresh(mock_get_profile, mock_user_in_group_list):
     mock_user_in_group_list.return_value = True
-    mock_get_profile.return_value = {"user_groups": []}
-    cookievars = {
-        "asf-urs": {
-            "urs-user-id": "user_id",
-            "urs-access-token": "access_token",
-            "urs-groups": []
-        }
-    }
+    user = UserProfile(
+        user_id='test_user_id',
+        token='test_token',
+        groups=[],
+        first_name='test_first_name',
+        last_name='test_last_name',
+        email='test_email',
+    )
+    mock_get_profile.return_value = user
 
-    assert user_in_group(["GROUP_1"], cookievars, refresh_first=True) == (True, {"user_groups": []})
+    assert user_in_group(["GROUP_1"], user, refresh_first=True) == (True, user)
     mock_user_in_group_list.assert_called_once()
 
     mock_user_in_group_list.return_value = False
-    assert user_in_group(["GROUP_1"], cookievars, refresh_first=False) == (False, {"user_groups": []})
+    assert user_in_group(["GROUP_1"], user, refresh_first=False) == (False, user)
 
 
 @mock.patch(f"{MODULE}.retrieve_secret", autospec=True)
@@ -247,57 +284,31 @@ def test_get_urs_creds(mock_retrieve_secret, monkeypatch):
     assert get_urs_creds() == secret
 
 
-@mock.patch(f"{MODULE}.time", autospec=True)
-@mock.patch(f"{MODULE}.get_exp_time", autospec=True)
-def test_user_profile_2_jwt_payload(mock_get_exp_time, mock_time):
-    mock_time.return_value = 0
-    mock_get_exp_time.return_value = 1000
-
-    user_profile = {
-        "first_name": "First",
-        "last_name": "Last",
-        "email_address": "email@domain.com",
-        "user_groups": []
-    }
-
-    assert user_profile_2_jwt_payload("user_id", "access_token", user_profile) == {
-        "first_name": "First",
-        "last_name": "Last",
-        "email": "email@domain.com",
-        "urs-user-id": "user_id",
-        "urs-access-token": "access_token",
-        "urs-groups": [],
-        "iat": 0,
-        "exp": 1000,
-    }
-
-
 @mock.patch(f"{MODULE}.do_auth", autospec=True)
 @mock.patch(f"{MODULE}.get_profile", autospec=True)
-@mock.patch(f"{MODULE}.user_profile_2_jwt_payload", autospec=True)
-@mock.patch(f"{MODULE}.make_set_cookie_headers_jwt", autospec=True)
+@mock.patch(f"{MODULE}.JwtManager.get_header_to_set_auth_cookie", autospec=True)
 def test_do_login(
-    mock_make_set_cookie_headers_jwt,
-    mock_user_profile_2_jwt_payload,
-    mock_get_profile,
-    mock_do_auth,
-    context
+        mock_get_header_to_set_auth_cookie,
+        mock_get_profile,
+        mock_do_auth,
+        context,
+        user_profile
 ):
     mock_do_auth.return_value = {
         "endpoint": "ENDPOINT",
         "access_token": "ACCESS_TOKEN"
     }
-    mock_get_profile.return_value = {
-        "user_groups": ["GROUP_1"]
-    }
-    mock_make_set_cookie_headers_jwt.return_value = {
+    user_profile.groups = ['GROUP_1']
+    mock_get_profile.return_value = user_profile
+    mock_get_header_to_set_auth_cookie.return_value = {
         "SET-COOKIE": "foo=bar"
     }
 
     args = {
         "code": "URS_CODE"
     }
-    assert do_login(args, context) == (
+    jwt_manager = JwtManager('algorithm', 'pub_key', 'priv_key', 'cookie-name')
+    assert do_login(args, context, jwt_manager) == (
         301,
         {},
         {
@@ -310,19 +321,7 @@ def test_do_login(
         "code": "URS_CODE",
         "state": "https://somewhere-else.com"
     }
-    assert do_login(args, context) == (
-        301,
-        {},
-        {
-            "Location": "https://somewhere-else.com",
-            "SET-COOKIE": "foo=bar"
-        }
-    )
-
-    mock_get_profile.return_value = {
-        "foo": "bar"
-    }
-    assert do_login(args, context) == (
+    assert do_login(args, context, jwt_manager) == (
         301,
         {},
         {
@@ -335,8 +334,9 @@ def test_do_login(
 @mock.patch(f"{MODULE}.do_auth", autospec=True)
 def test_do_login_failed_auth(mock_do_auth, context):
     mock_do_auth.return_value = {}
+    jwt_manager = JwtManager('algorithm', 'pub_key', 'priv_key', 'cookie-name')
 
-    assert do_login({"code": "URS_CODE"}, context) == (
+    assert do_login({"code": "URS_CODE"}, context, jwt_manager) == (
         400,
         {
             "contentstring": "There was a problem talking to URS Login",
@@ -353,9 +353,10 @@ def test_do_login_failed_profile(mock_get_profile, mock_do_auth, context):
         "endpoint": "ENDPOINT",
         "access_token": "ACCESS_TOKEN"
     }
-    mock_get_profile.return_value = {}
+    mock_get_profile.return_value = None
+    jwt_manager = JwtManager('algorithm', 'pub_key', 'priv_key', 'cookie-name')
 
-    assert do_login({"code": "URS_CODE"}, context) == (
+    assert do_login({"code": "URS_CODE"}, context, jwt_manager) == (
         400,
         {
             "contentstring": "Could not get user profile from URS",
@@ -366,7 +367,8 @@ def test_do_login_failed_profile(mock_get_profile, mock_do_auth, context):
 
 
 def test_do_login_error():
-    assert do_login({}, {}) == (
+    jwt_manager = JwtManager('algorithm', 'pub_key', 'priv_key', 'cookie-name')
+    assert do_login({}, {}, jwt_manager) == (
         400,
         {
             "contentstring": "No params",
@@ -374,7 +376,8 @@ def test_do_login_error():
         },
         {}
     )
-    assert do_login({"error": "URS_ERROR"}, {}) == (
+
+    assert do_login({"error": "URS_ERROR"}, {}, jwt_manager) == (
         400,
         {
             "contentstring": 'An error occurred while trying to log into URS. URS says: "URS_ERROR". ',
@@ -382,7 +385,7 @@ def test_do_login_error():
         },
         {}
     )
-    assert do_login({"error": "access_denied"}, {}) == (
+    assert do_login({"error": "access_denied"}, {}, jwt_manager) == (
         401,
         {
             "contentstring": "Be sure to agree to the EULA.",
@@ -391,7 +394,7 @@ def test_do_login_error():
         },
         {}
     )
-    assert do_login({"foo": "bar"}, {}) == (
+    assert do_login({"foo": "bar"}, {}, jwt_manager) == (
         400,
         {
             "contentstring": "Did not get the required CODE from URS",

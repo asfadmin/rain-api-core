@@ -4,11 +4,11 @@ import os
 import urllib
 from time import time
 
+from rain_api_core.auth import JwtManager, UserProfile
 from rain_api_core.aws_util import retrieve_secret
 from rain_api_core.general_util import duration, return_timing_object
 from rain_api_core.logging import log_context
 from rain_api_core.timer import Timer
-from rain_api_core.view_util import JWT_COOKIE_NAME, get_exp_time, make_set_cookie_headers_jwt
 
 log = logging.getLogger(__name__)
 
@@ -97,11 +97,22 @@ def get_urs_url(ctxt: dict, to: str = None) -> str:
     return urs_url
 
 
-def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: dict = None) -> dict:
+def get_user_profile(urs_user_payload: dict, access_token) -> UserProfile:
+    return UserProfile(
+        user_id=urs_user_payload['uid'],
+        token=access_token,
+        groups=urs_user_payload['user_groups'],
+        first_name=urs_user_payload['first_name'],
+        last_name=urs_user_payload['last_name'],
+        email=urs_user_payload['email_address'],
+    )
+
+
+def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: dict = None) -> UserProfile:
     aux_headers = aux_headers or {}  # Safer Default
 
     if not user_id or not token:
-        return {}
+        return None
 
     # get_new_token_and_profile() will pass this function a temporary token with which to fetch the profile info. We
     # don't want to keep it around, just use it here, once:
@@ -122,7 +133,7 @@ def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: di
         log.info(return_timing_object(service="EDL", endpoint=url, duration=duration(timer)))
         user_profile = json.loads(packet)
 
-        return user_profile
+        return get_user_profile(user_profile, headertoken)
 
     except urllib.error.URLError as e:
         log.warning("Error fetching profile: {0}".format(e))
@@ -134,7 +145,7 @@ def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: di
             f"We got that 401 above and we're using a temptoken ({temptoken}), "
             "so giving up and not getting a profile."
         )
-    return {}
+    return None
 
 
 def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict = None):
@@ -177,7 +188,7 @@ def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict 
         log.error("Error fetching auth: %s", e)
         timer.mark()
         log.debug("ET for the attempt: %.4f", timer.total.duration())
-        return False
+        return None
 
 
 def user_in_group_list(private_groups: list, user_groups: list) -> bool:
@@ -220,36 +231,34 @@ def user_in_group_urs(private_groups, user_id, token, user_profile=None, refresh
     return False, new_profile
 
 
-def user_in_group(private_groups, cookievars, refresh_first=False, aux_headers=None):
+def user_in_group(private_groups, user_profile: UserProfile, refresh_first=False, aux_headers=None):
     aux_headers = aux_headers or {}  # A safer default
 
     # If a new profile is fetched, it is assigned to this var, and returned so that a fresh jwt cookie can be set.
-    new_profile = {}
+    new_profile = None
 
     if not private_groups:
         return False, new_profile
 
-    jwt_payload = cookievars.get(JWT_COOKIE_NAME)
-
-    if not jwt_payload:
+    if not user_profile:
         return False, new_profile
 
     if refresh_first:
-        new_profile = get_profile(jwt_payload['urs-user-id'], jwt_payload['urs-access-token'], aux_headers=aux_headers)
-        jwt_payload['urs-groups'] = new_profile['user_groups']
+        new_profile = get_profile(user_profile.user_id, user_profile.token, aux_headers=aux_headers)
+        user_profile.groups = new_profile.groups
 
-    in_group = user_in_group_list(private_groups, jwt_payload['urs-groups'])
+    in_group = user_in_group_list(private_groups, user_profile.groups)
     if in_group:
         return True, new_profile
 
     if not in_group and not refresh_first:
         # one last ditch effort to see if they were so very recently added to group:
-        jwt_payload['urs-groups'] = get_profile(
-            jwt_payload['urs-user-id'],
-            jwt_payload['urs-access-token'],
+        user_profile = get_profile(
+            user_profile.user_id,
+            user_profile.token,
             aux_headers=aux_headers
-        )['user_groups']
-        return user_in_group(private_groups, cookievars, refresh_first=True, aux_headers=aux_headers)
+        )
+        return user_in_group(private_groups, user_profile, refresh_first=True, aux_headers=aux_headers)
 
     return False, new_profile
 
@@ -277,21 +286,8 @@ def get_urs_creds() -> dict:
     return secret
 
 
-def user_profile_2_jwt_payload(user_id: str, access_token: str, user_profile: dict) -> dict:
-    return {
-        'first_name': user_profile['first_name'],
-        'last_name': user_profile['last_name'],
-        'email': user_profile['email_address'],
-        'urs-user-id': user_id,
-        'urs-access-token': access_token,
-        'urs-groups': user_profile['user_groups'],
-        'iat': int(time()),
-        'exp': get_exp_time(),
-    }
-
-
 # This do_login() is mainly for chalice clients.
-def do_login(args, context, cookie_domain='', aux_headers=None):
+def do_login(args, context, jwt_manager: JwtManager, cookie_domain='', aux_headers=None):
     aux_headers = aux_headers or {}  # A safer default
 
     log.debug('the query_params: {}'.format(args))
@@ -337,20 +333,15 @@ def do_login(args, context, cookie_domain='', aux_headers=None):
 
     user_profile = get_profile(user_id, auth['access_token'], aux_headers={})
     log.debug('Got the user profile: {}'.format(user_profile))
-    if user_profile:
+    if user_profile is not None:
         log.debug('urs-access-token: {}'.format(auth['access_token']))
         if 'state' in args:
             redirect_to = args["state"]
         else:
             redirect_to = get_base_url(context)
 
-        if 'user_groups' not in user_profile:
-            user_profile['user_groups'] = []
-
-        jwt_cookie_payload = user_profile_2_jwt_payload(user_id, auth['access_token'], user_profile)
-
         headers = {'Location': redirect_to}
-        headers.update(make_set_cookie_headers_jwt(jwt_cookie_payload, '', cookie_domain))
+        headers.update(jwt_manager.get_header_to_set_auth_cookie(user_profile, cookie_domain))
         return 301, {}, headers
 
     template_vars = {'contentstring': 'Could not get user profile from URS', 'title': 'Could Not Login'}
