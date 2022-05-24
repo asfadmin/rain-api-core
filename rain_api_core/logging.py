@@ -34,7 +34,7 @@ def get_log():
     loglevel = os.getenv('LOGLEVEL', 'INFO')
     logtype = os.getenv('LOGTYPE', 'json')
     if logtype == 'flat':
-        formatter = logging.Formatter(
+        formatter = LogCensorFormatter(
             "%(levelname)s: %(message)s (%(filename)s line %(lineno)d/%(build_vers)s/%(maturity)s) - "
             "RequestId: %(request_id)s; OriginRequestId: %(origin_request_id)s; user_id: %(user_id)s; route: %(route)s"
         )
@@ -157,6 +157,11 @@ class JSONPercentStyle():
             return self._format(record)
         except KeyError as e:
             raise ValueError(f"Formatting field not found in record: {e}")
+
+
+class LogCensorFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return filter_log_credentials(super().format(record))
 
 
 class JSONFormatter(logging.Formatter):

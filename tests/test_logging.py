@@ -69,7 +69,7 @@ def test_get_log(capsys, monkeypatch):
     # Reset the root logger
     monkeypatch.setattr(logging, "root", logging.RootLogger(logging.WARNING))
     log = get_log()
-    log.info("test message: %s", 100)
+    log.info("test message: %s, Creds: %s", 100, "Basic ABCD")
 
     # NOTE: Adding any logging or print statements into custom logging internals may cause this test to fail
     stdout, _ = capsys.readouterr()
@@ -82,7 +82,7 @@ def test_get_log(capsys, monkeypatch):
         "level": "INFO",
         "RequestId": None,
         "OriginRequestId": None,
-        "message": "test message: 100",
+        "message": "test message: 100, Creds: Basic XXX<BASICAUTH>XXX",
         "maturity": "DEV",
         "user_id": None,
         "route": None,
@@ -163,12 +163,12 @@ def test_get_log_flat(capsys, monkeypatch):
     monkeypatch.setenv("LOGTYPE", "flat")
 
     log = get_log()
-    log.info("test message: %s", 100)
+    log.info("test message: %s, Creds: %s", 100, "Basic ABCD")
 
     # NOTE: Adding any logging or print statements into custom logging internals may cause this test to fail
     stdout, _ = capsys.readouterr()
     assert re.match(
-        r"INFO: test message: 100 \([a-z_]+.py line [0-9]+/NOBUILD/DEV\) - "
+        r"INFO: test message: 100, Creds: Basic XXX<BASICAUTH>XXX \([a-z_]+.py line [0-9]+/NOBUILD/DEV\) - "
         "RequestId: None; OriginRequestId: None; user_id: None; route: None\n",
         stdout
     )
