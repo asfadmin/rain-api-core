@@ -1,0 +1,2 @@
+# Only update dependencies when CVE's are found
+update: insecure
