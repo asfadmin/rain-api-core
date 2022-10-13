@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from rain_api_core.bucket_map import BucketMap
+from rain_api_core.bucket_map import _PUBLIC, BucketMap, BucketMapEntry
 
 
 @pytest.fixture
@@ -175,6 +175,147 @@ def test_get_path_nonexistent():
     assert BucketMap({"bar": "bucket1"}).get_path(["foo"]) is None
     assert BucketMap({"foo": {}}).get_path(["foo"]) is None
     assert BucketMap({"foo": {"qux":  "bucket1"}}).get_path(["foo", "bar"]) is None
+
+
+def test_entries_empty():
+    b_map = BucketMap({})
+
+    assert list(b_map.entries()) == []
+
+
+def test_entries_simple():
+    bucket_map = {
+        "PATH": "bucket-name",
+    }
+    b_map = BucketMap(bucket_map, bucket_name_prefix="pre-")
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="pre-bucket-name",
+            bucket_path="PATH",
+            object_key="",
+        )
+    ]
+
+
+def test_entries_multiple():
+    bucket_map = {
+        "PATH": "bucket1",
+        "PATH2": "bucket2"
+    }
+    b_map = BucketMap(bucket_map, bucket_name_prefix="pre-")
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="pre-bucket1",
+            bucket_path="PATH",
+            object_key="",
+        ),
+        BucketMapEntry(
+            bucket="pre-bucket2",
+            bucket_path="PATH2",
+            object_key="",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "bucket_map",
+    (
+        {"foo": "bucket1"},
+        {"foo": {"bucket": "bucket1"}},
+        {"MAP": {"foo": {"bucket": "bucket1"}}}
+    )
+)
+def test_entries_compatibility(bucket_map):
+    b_map = BucketMap(bucket_map)
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="bucket1",
+            bucket_path="foo",
+            object_key="",
+        )
+    ]
+
+
+def test_entries_nested():
+    bucket_map = {
+        "PATH": {
+            "LEVEL1": {
+                "LEVEL2": "bucket-name"
+            }
+        },
+    }
+
+    b_map = BucketMap(bucket_map)
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="bucket-name",
+            bucket_path="PATH/LEVEL1/LEVEL2",
+            object_key="",
+        )
+    ]
+
+
+def test_entries(sample_bucket_map):
+    b_map = BucketMap(sample_bucket_map)
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="authed-bucket",
+            bucket_path="ANY_AUTHED",
+            object_key="",
+        ),
+        BucketMapEntry(
+            bucket="browse-bucket",
+            bucket_path="general-browse",
+            object_key="",
+            _access_control={"": _PUBLIC}
+        ),
+        BucketMapEntry(
+            bucket="bucket",
+            bucket_path="productX",
+            object_key="",
+            _access_control={
+                "2020/12": {"science_team"},
+                "browse": _PUBLIC
+            }
+        ),
+        BucketMapEntry(
+            bucket="nested-bucket-public",
+            bucket_path="nested/nested2a/nested3",
+            object_key="",
+        ),
+        BucketMapEntry(
+            bucket="nested-bucket-private",
+            bucket_path="nested/nested2b",
+            object_key="",
+            _access_control={"": set()}
+        ),
+    ]
+
+
+def test_entries_with_headers():
+    bucket_map = {
+        "PATH": {
+            "bucket": "bucket-name",
+            "headers": {
+                "Header1": "Value1"
+            }
+        }
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert list(b_map.entries()) == [
+        BucketMapEntry(
+            bucket="bucket-name",
+            bucket_path="PATH",
+            object_key="",
+            headers={"Header1": "Value1"}
+        )
+    ]
 
 
 def test_check_bucket_access(sample_bucket_map):

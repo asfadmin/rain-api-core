@@ -1,9 +1,24 @@
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Optional, Sequence
 
 # A unique object to signal that a bucket is public
 _PUBLIC = object()
+
+
+def _is_accessible(
+    required_groups: Optional[set],
+    groups: Optional[Iterable[str]]
+) -> bool:
+    # Check for public access
+    if required_groups is None or required_groups is _PUBLIC:
+        return True
+
+    # At this point public access is not allowed
+    if groups is None:
+        return False
+
+    return not required_groups or not required_groups.isdisjoint(groups)
 
 
 @dataclass()
@@ -11,8 +26,8 @@ class BucketMapEntry():
     bucket: str
     bucket_path: str
     object_key: str
-    headers: dict
-    _access_control: Optional[dict]
+    headers: dict = field(default_factory=dict)
+    _access_control: Optional[dict] = None
 
     def is_accessible(self, groups: Iterable[str] = None) -> bool:
         """Check if the object is accessible with the given permissions.
@@ -87,8 +102,7 @@ class BucketMap():
         return self.get_path(path)
 
     def get_path(self, path: Sequence[str]) -> Optional[BucketMapEntry]:
-        # Old and REVERSE format has no 'MAP'.
-        node = self.bucket_map.get("MAP", self.bucket_map)
+        node = self._get_map()
 
         headers = None
         # Walk the bucket map to see if this path is valid
@@ -112,18 +126,64 @@ class BucketMap():
             bucket_path = "/".join(head)
             object_key = "/".join(tail)
 
-            return BucketMapEntry(
-                bucket=self.bucket_name_prefix + bucket,
+            return self._make_entry(
+                bucket=bucket,
                 bucket_path=bucket_path,
                 object_key=object_key,
-                headers=headers or {},
-                # TODO(reweeden): Do we really want to be control access by
-                # bucket? Wouldn't it make more sense to control access by
-                # path instead?
-                _access_control=self.access_control.get(bucket)
+                headers=headers
             )
 
         return None
+
+    def entries(self):
+        for bucket, path_parts, headers in _walk_entries(self._get_map()):
+            yield self._make_entry(
+                bucket=bucket,
+                bucket_path="/".join(path_parts),
+                object_key="",
+                headers=headers
+            )
+
+    def _get_map(self) -> dict:
+        # Old and REVERSE format has no 'MAP'.
+        return self.bucket_map.get("MAP", self.bucket_map)
+
+    def _make_entry(
+        self,
+        bucket: str,
+        bucket_path: str,
+        object_key: str,
+        headers: Optional[dict] = None
+    ):
+        return BucketMapEntry(
+            bucket=self.bucket_name_prefix + bucket,
+            bucket_path=bucket_path,
+            object_key=object_key,
+            headers=headers or {},
+            # TODO(reweeden): Do we really want to control access by
+            # bucket? Wouldn't it make more sense to control access by
+            # path instead?
+            _access_control=self.access_control.get(bucket)
+        )
+
+
+def _walk_entries(node: dict, path=()) -> Generator[Tuple[str, tuple, Optional[dict]], None, None]:
+    """A generator to recursively yield all leaves of a bucket map"""
+
+    for key, val in node.items():
+        if key in ("PUBLIC_BUCKETS", "PRIVATE_BUCKETS"):
+            continue
+
+        path_parts = (*path, key)
+
+        # Check if we hit a leaf of the YAML tree
+        if isinstance(val, str):
+            yield val, path_parts, None
+        elif "bucket" in val:
+            yield val["bucket"], path_parts, val.get("headers")
+
+        elif val:
+            yield from _walk_entries(val, path_parts)
 
 
 def _parse_access_control(bucket_map: dict) -> dict:
