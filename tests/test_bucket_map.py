@@ -188,7 +188,7 @@ def test_get_path_nonexistent():
     assert BucketMap({}).get_path([]) is None
     assert BucketMap({"bar": "bucket1"}).get_path(["foo"]) is None
     assert BucketMap({"foo": {}}).get_path(["foo"]) is None
-    assert BucketMap({"foo": {"qux":  "bucket1"}}).get_path(["foo", "bar"]) is None
+    assert BucketMap({"foo": {"qux": "bucket1"}}).get_path(["foo", "bar"]) is None
 
 
 def test_entries_empty():
