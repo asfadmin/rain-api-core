@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
+from typing import Generator, Iterable, Optional, Sequence, Tuple
 
 # A unique object to signal that a bucket is public
 _PUBLIC = object()
@@ -38,15 +38,7 @@ class BucketMapEntry():
         """
 
         required_groups = self.get_required_groups()
-        # Check for public access
-        if required_groups is None:
-            return True
-
-        # At this point public access is not allowed
-        if groups is None:
-            return False
-
-        return not required_groups or not required_groups.isdisjoint(groups)
+        return _is_accessible(required_groups, groups)
 
     def get_required_groups(self) -> Optional[set]:
         """Get a set of permissions protecting this object.
@@ -144,6 +136,10 @@ class BucketMap():
                 headers=headers
             )
 
+    def to_iam_policy(self, groups: Iterable[str] = None) -> dict:
+        generator = IamPolicyGenerator(groups)
+        return generator.generate_policy(self.entries())
+
     def _get_map(self) -> dict:
         # Old and REVERSE format has no 'MAP'.
         return self.bucket_map.get("MAP", self.bucket_map)
@@ -228,3 +224,172 @@ def _parse_access_control(bucket_map: dict) -> dict:
         access[bucket]["".join(prefix)] = obj
 
     return dict(access)
+
+
+class IamPolicyGenerator:
+    def __init__(self, groups: Iterable[str] = None):
+        self.groups = groups
+
+    def _is_accessible(self, required_groups: Optional[set]) -> bool:
+        return _is_accessible(required_groups, self.groups)
+
+    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> dict:
+        full_access_entries = []
+        partial_access_entries = []
+
+        for entry in entries:
+            if self._is_whole_bucket_accessible(entry):
+                collection = full_access_entries
+            else:
+                collection = partial_access_entries
+            collection.append(entry)
+
+        full_access_statement = ({
+            "Effect": "Allow",
+            "Action": ["s3:GetObject", "s3:ListBucket"],
+            "Resource": [
+                resource
+                for entry in full_access_entries
+                for resource in (
+                    f"arn:aws:s3:::{entry.bucket}",
+                    f"arn:aws:s3:::{entry.bucket}/*"
+                )
+            ]
+        },) if full_access_entries else ()
+
+        statement = [
+            *full_access_statement,
+            *(
+                statement
+                for entry in partial_access_entries
+                for statement in self._generate_iam_statements(entry)
+            )
+        ]
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": statement or [
+                # Special case noop statement that will never match anything.
+                # We need this because IAM doesn't allow empty statement lists
+                {
+                    "Effect": "Allow",
+                    "Action": ["s3:GetObject", "s3:ListBucket"],
+                    "Resource": ["*"],
+                    "Condition": {
+                        "StringNotLike": {
+                            "s3:prefix": [""]
+                        }
+                    }
+                }
+            ]
+        }
+
+        return policy
+
+    def _is_whole_bucket_accessible(self, entry: BucketMapEntry) -> bool:
+        if entry._access_control is None:
+            return True
+
+        return all(
+            self._is_accessible(required_groups)
+            for required_groups in entry._access_control.values()
+        )
+
+    def _generate_iam_statements(self, entry: BucketMapEntry) -> Generator[dict, None, None]:
+        assert entry._access_control, "Public buckets should be handled already"
+
+        for condition in self._generate_iam_conditions(entry._access_control):
+            statement = {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    f"arn:aws:s3:::{entry.bucket}",
+                    f"arn:aws:s3:::{entry.bucket}/*"
+                ]
+            }
+            if condition:
+                statement["Condition"] = condition
+
+            yield statement
+
+    def _generate_iam_conditions(self, access_control: dict) -> Generator[dict, None, None]:
+        access_control = dict(access_control)
+        access_control.setdefault("", None)
+
+        conditions = self._generate_string_match_conditions(access_control)
+
+        for string_like, string_not_like in conditions:
+            condition = {}
+            if string_like:
+                condition["StringLike"] = {
+                    "s3:prefix": string_like
+                }
+            if string_not_like:
+                condition["StringNotLike"] = {
+                    "s3:prefix": string_not_like
+                }
+
+            yield condition
+
+    def _generate_string_match_conditions(
+        self,
+        access_control: dict
+    ) -> Generator[Tuple[list, list], None, None]:
+        """Generate StringLike and StringNotLike lists needed to describe
+        bucket permissions in IAM policy terms.
+
+        Each pair of lists should be added as conditions on new allow
+        statement for the entire bucket.
+        """
+        # Since we are limited to using prefix matching, we can only describe
+        # one nested interval per IAM statement.
+        #     public/private/public/
+        #     ^^^^^^^ allow
+        #     ^^^^^^^^^^^^^^^ deny
+        # Will allow anything in public/ but not public/private/. If we need to
+        # allow more stuff in public/private/public/ we'll need to use a second
+        # IAM statement for that.
+
+        # Find all prefix intervals which we should be allowed to access
+        # Examples (allow, deny):
+        #    (public/, public/private/)
+        #    (public/private/public, public/private/public/private)
+        #    (, private/)
+        allowed_intervals = {}
+        for key_prefix, access in reversed(access_control.items()):
+            if self._is_accessible(access):
+                assert key_prefix not in allowed_intervals
+                allowed_intervals[key_prefix] = []
+                continue
+
+            # NOTE: O(n**2) for n = len(access_control).
+            # Not a big deal unless someone has a seriously insane auto
+            # generated bucketmap that makes heavy use of prefix permissions
+            longest_prefix, _ = max(
+                ((k, len(k)) for k in allowed_intervals if key_prefix.startswith(k)),
+                key=lambda x: x[1],
+                default=(None, 0)
+            )
+            if longest_prefix is None:
+                continue
+
+            allowed_intervals[longest_prefix].append(key_prefix)
+
+        # Merge endpoints
+        # For example we may have a bunch of open intervals:
+        #     (public1/, )
+        #     (public2/, )
+        # Which should be merged into a single condition
+        allowed_intervals_endpoints = defaultdict(list)
+        for start_point, end_points in allowed_intervals.items():
+            allowed_intervals_endpoints[tuple(end_points)].append(start_point)
+
+        # Transform output so it makes more sense to humans
+        # Reversing list order is purely aesthetic so that the generated
+        # condition values are in the same order as in the bucket map.
+        yield from (
+            (
+                [s for s in like[::-1] if s],
+                [s for s in not_like[::-1] if s]
+            )
+            for not_like, like in allowed_intervals_endpoints.items()
+        )
