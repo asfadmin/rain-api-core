@@ -8,7 +8,7 @@ UNCENSORED_LOGGING = os.getenv("UNCENSORED_LOGGING")
 
 LOG_CENSOR = [
     {
-        "regex": r"(eyJ0e[A-Za-z0-9-_]{10})[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*([A-Za-z0-9-_]{10})",
+        "regex": r"(eyJ[A-Za-z0-9-_]{12})[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*([A-Za-z0-9-_]{10})",
         "replace": "\\g<1>XXX<JWTTOKEN>XXX\\g<2>",
         "description": "X-out JWT Token payload"
     },
