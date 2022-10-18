@@ -2,8 +2,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Generator, Iterable, Optional, Sequence, Tuple
 
-# A unique object to signal that a bucket is public
-_PUBLIC = object()
+# By default, buckets are accessible to any logged in users. This is
+# represented by an empty set.
+_DEFAULT_PERMISSION_FACTORY = set
 
 
 def _is_accessible(
@@ -11,7 +12,7 @@ def _is_accessible(
     groups: Optional[Iterable[str]]
 ) -> bool:
     # Check for public access
-    if required_groups is None or required_groups is _PUBLIC:
+    if required_groups is None:
         return True
 
     # At this point public access is not allowed
@@ -48,21 +49,15 @@ class BucketMapEntry():
         empty set means any logged in user can access the object.
         """
         if not self._access_control:
-            # By default, buckets are accessible to any logged in users
-            return set()
+            return _DEFAULT_PERMISSION_FACTORY()
 
         # NOTE: Key order is important here. Most deeply nested keys need to be
         # checked first.
         for key_prefix, access in self._access_control.items():
-            if not self.object_key.startswith(key_prefix):
-                continue
+            if self.object_key.startswith(key_prefix):
+                return access
 
-            if access is _PUBLIC:
-                return None
-
-            return access
-
-        return set()
+        return _DEFAULT_PERMISSION_FACTORY()
 
 
 class BucketMap():
@@ -195,12 +190,13 @@ def _parse_access_control(bucket_map: dict) -> dict:
 
     {
         "bucket1": {
-            "key/foo/bar": _PUBLIC,
+            "key/foo/bar": None,
             "key/bar/baz": {"group"},
-            "key": {"group2"}
+            "key": {"group2"},
+            "": set()
         },
         "bucket2": {
-            "": _PUBLIC
+            "": None
         },
         "bucket3": {
             "": {"group3"}
@@ -211,7 +207,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     private_buckets = bucket_map.get("PRIVATE_BUCKETS", {})
 
     try:
-        access_list = [(rule, _PUBLIC) for rule in public_buckets]
+        access_list = [(rule, None) for rule in public_buckets]
     except TypeError:
         access_list = []
     access_list.extend((rule, set(groups)) for rule, groups in private_buckets.items())
@@ -226,6 +222,12 @@ def _parse_access_control(bucket_map: dict) -> dict:
     for (rule, obj) in access_list:
         bucket, *prefix = rule.split("/", 1)
         access[bucket]["".join(prefix)] = obj
+
+    # Set default permissions. We do this after the other rules have been added
+    # so that the default permission rule always comes last.
+    for obj in access.values():
+        if "" not in obj:
+            obj[""] = _DEFAULT_PERMISSION_FACTORY()
 
     return dict(access)
 
@@ -317,9 +319,6 @@ class IamPolicyGenerator:
             yield statement
 
     def _generate_iam_conditions(self, access_control: dict) -> Generator[dict, None, None]:
-        access_control = dict(access_control)
-        access_control.setdefault("", None)
-
         conditions = self._generate_string_match_conditions(access_control)
 
         for string_like, string_not_like in conditions:

@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from rain_api_core.bucket_map import _PUBLIC, BucketMap, BucketMapEntry
+from rain_api_core.bucket_map import BucketMap, BucketMapEntry
 
 
 @pytest.fixture
@@ -286,7 +286,7 @@ def test_entries(sample_bucket_map):
             bucket="browse-bucket",
             bucket_path="general-browse",
             object_key="",
-            _access_control={"": _PUBLIC}
+            _access_control={"": None}
         ),
         BucketMapEntry(
             bucket="bucket",
@@ -294,7 +294,8 @@ def test_entries(sample_bucket_map):
             object_key="",
             _access_control={
                 "2020/12": {"science_team"},
-                "browse": _PUBLIC
+                "browse": None,
+                "": set()
             }
         ),
         BucketMapEntry(
