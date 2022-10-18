@@ -230,7 +230,7 @@ def test_make_jwt_payload(mock_get_jwt_keys, jwt_priv_key):
     encoded = make_jwt_payload({"foo": "bar"})
 
     header, payload, signature = encoded.split(".")
-    assert urlsafe_b64decode(header + "==") == b'{"typ":"JWT","alg":"RS256"}'
+    assert urlsafe_b64decode(header + "==") == b'{"alg":"RS256","typ":"JWT"}'
     assert urlsafe_b64decode(payload + "==") == b'{"foo":"bar"}'
 
 
