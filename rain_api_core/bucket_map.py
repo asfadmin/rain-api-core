@@ -136,8 +136,12 @@ class BucketMap():
                 headers=headers
             )
 
-    def to_iam_policy(self, groups: Iterable[str] = None) -> dict:
-        generator = IamPolicyGenerator(groups)
+    def to_iam_policy(
+        self,
+        groups: Iterable[str] = None,
+        permissions: Iterable[str] = ("s3:GetObject", "s3:ListBucket")
+    ) -> dict:
+        generator = IamPolicyGenerator(groups, permissions)
         return generator.generate_policy(self.entries())
 
     def _get_map(self) -> dict:
@@ -227,8 +231,9 @@ def _parse_access_control(bucket_map: dict) -> dict:
 
 
 class IamPolicyGenerator:
-    def __init__(self, groups: Iterable[str] = None):
+    def __init__(self, groups: Iterable[str], permissions: Iterable[str]):
         self.groups = groups
+        self.permissions = list(permissions)
 
     def _is_accessible(self, required_groups: Optional[set]) -> bool:
         return _is_accessible(required_groups, self.groups)
@@ -246,7 +251,7 @@ class IamPolicyGenerator:
 
         full_access_statement = ({
             "Effect": "Allow",
-            "Action": ["s3:GetObject", "s3:ListBucket"],
+            "Action": self.permissions,
             "Resource": [
                 resource
                 for entry in full_access_entries
@@ -272,7 +277,7 @@ class IamPolicyGenerator:
                 # We need this because IAM doesn't allow empty statement lists
                 {
                     "Effect": "Allow",
-                    "Action": ["s3:GetObject", "s3:ListBucket"],
+                    "Action": self.permissions,
                     "Resource": ["*"],
                     "Condition": {
                         "StringNotLike": {
@@ -300,7 +305,7 @@ class IamPolicyGenerator:
         for condition in self._generate_iam_conditions(entry._access_control):
             statement = {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": self.permissions,
                 "Resource": [
                     f"arn:aws:s3:::{entry.bucket}",
                     f"arn:aws:s3:::{entry.bucket}/*"

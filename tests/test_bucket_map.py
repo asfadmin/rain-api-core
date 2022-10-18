@@ -484,6 +484,26 @@ def test_to_iam_policy_empty():
     }
 
 
+def test_to_iam_policy_empty_permissions():
+    b_map = BucketMap({})
+
+    assert b_map.to_iam_policy(permissions=("s3:ListBucket",)) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": ["*"],
+                "Condition": {
+                    "StringNotLike": {
+                        "s3:prefix": [""]
+                    }
+                }
+            }
+        ]
+    }
+
+
 def test_to_iam_policy_simple():
     bucket_map = {
         "PATH": "bucket-name",
@@ -496,6 +516,27 @@ def test_to_iam_policy_simple():
             {
                 "Effect": "Allow",
                 "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name",
+                    "arn:aws:s3:::bucket-name/*"
+                ]
+            }
+        ]
+    }
+
+
+def test_to_iam_policy_simple_permissions():
+    bucket_map = {
+        "PATH": "bucket-name",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=(), permissions=("s3:ListBucket",)) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
                     "arn:aws:s3:::bucket-name/*"
