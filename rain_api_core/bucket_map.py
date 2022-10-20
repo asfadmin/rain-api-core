@@ -241,15 +241,17 @@ class IamPolicyGenerator:
         return _is_accessible(required_groups, self.groups)
 
     def generate_policy(self, entries: Iterable[BucketMapEntry]) -> dict:
+        full_access_buckets = set()
         full_access_entries = []
         partial_access_entries = []
 
         for entry in entries:
             if self._is_whole_bucket_accessible(entry):
-                collection = full_access_entries
+                if entry.bucket not in full_access_buckets:
+                    full_access_entries.append(entry)
+                    full_access_buckets.add(entry.bucket)
             else:
-                collection = partial_access_entries
-            collection.append(entry)
+                partial_access_entries.append(entry)
 
         full_access_statement = ({
             "Effect": "Allow",

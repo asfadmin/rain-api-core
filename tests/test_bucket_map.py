@@ -547,6 +547,34 @@ def test_to_iam_policy_simple_permissions():
     }
 
 
+def test_to_iam_policy_simple_duplicates():
+    bucket_map = {
+        "PATH1": "bucket-name1",
+        "PATH2": "bucket-name1",
+        "PATH3": "bucket-name1",
+        "PATH4": "bucket-name2",
+        "PATH5": "bucket-name2",
+        "PATH6": "bucket-name2",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=()) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name1",
+                    "arn:aws:s3:::bucket-name1/*",
+                    "arn:aws:s3:::bucket-name2",
+                    "arn:aws:s3:::bucket-name2/*"
+                ]
+            }
+        ]
+    }
+
+
 def test_to_iam_policy_private():
     bucket_map = {
         "PATH": "bucket-name",
