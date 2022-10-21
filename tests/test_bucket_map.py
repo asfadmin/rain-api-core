@@ -468,41 +468,13 @@ def test_get_required_groups(sample_bucket_map):
 def test_to_iam_policy_empty():
     b_map = BucketMap({})
 
-    assert b_map.to_iam_policy() == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": ["*"],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [""]
-                    }
-                }
-            }
-        ]
-    }
+    assert b_map.to_iam_policy() is None
 
 
 def test_to_iam_policy_empty_permissions():
     b_map = BucketMap({})
 
-    assert b_map.to_iam_policy(permissions=("s3:ListBucket",)) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:ListBucket"],
-                "Resource": ["*"],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [""]
-                    }
-                }
-            }
-        ]
-    }
+    assert b_map.to_iam_policy(permissions=("s3:ListBucket",)) is None
 
 
 def test_to_iam_policy_simple():
@@ -547,6 +519,34 @@ def test_to_iam_policy_simple_permissions():
     }
 
 
+def test_to_iam_policy_simple_duplicates():
+    bucket_map = {
+        "PATH1": "bucket-name1",
+        "PATH2": "bucket-name1",
+        "PATH3": "bucket-name1",
+        "PATH4": "bucket-name2",
+        "PATH5": "bucket-name2",
+        "PATH6": "bucket-name2",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=()) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name1",
+                    "arn:aws:s3:::bucket-name1/*",
+                    "arn:aws:s3:::bucket-name2",
+                    "arn:aws:s3:::bucket-name2/*"
+                ]
+            }
+        ]
+    }
+
+
 def test_to_iam_policy_private():
     bucket_map = {
         "PATH": "bucket-name",
@@ -556,23 +556,7 @@ def test_to_iam_policy_private():
     }
     b_map = BucketMap(bucket_map)
 
-    # This statement is effectively a deny-all without being an explicity Deny
-    # since it is effectively asserting `not "anything".startswith("")`
-    assert b_map.to_iam_policy(groups=()) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": ["*"],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [""]
-                    }
-                }
-            }
-        ]
-    }
+    assert b_map.to_iam_policy(groups=()) is None
 
 
 def test_to_iam_policy_private_with_public_prefix():
@@ -995,21 +979,7 @@ def test_to_iam_policy(sample_bucket_map):
 def test_to_iam_policy_groups_noaccess(groups_bucket_map, groups):
     b_map = BucketMap(groups_bucket_map)
 
-    assert b_map.to_iam_policy(groups=groups) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": ["*"],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [""]
-                    }
-                }
-            }
-        ]
-    }
+    assert b_map.to_iam_policy(groups=groups) is None
 
 
 def test_to_iam_policy_groups_single_access(groups_bucket_map):

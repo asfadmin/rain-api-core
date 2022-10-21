@@ -240,57 +240,38 @@ class IamPolicyGenerator:
     def _is_accessible(self, required_groups: Optional[set]) -> bool:
         return _is_accessible(required_groups, self.groups)
 
-    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> dict:
-        full_access_entries = []
+    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
+        full_access_statement = _IamStatement(effect="Allow", action=self.permissions)
         partial_access_entries = []
 
         for entry in entries:
             if self._is_whole_bucket_accessible(entry):
-                collection = full_access_entries
+                full_access_statement.add_resource(f"arn:aws:s3:::{entry.bucket}")
+                full_access_statement.add_resource(f"arn:aws:s3:::{entry.bucket}/*")
             else:
-                collection = partial_access_entries
-            collection.append(entry)
+                partial_access_entries.append(entry)
 
-        full_access_statement = ({
-            "Effect": "Allow",
-            "Action": self.permissions,
-            "Resource": [
-                resource
-                for entry in full_access_entries
-                for resource in (
-                    f"arn:aws:s3:::{entry.bucket}",
-                    f"arn:aws:s3:::{entry.bucket}/*"
-                )
-            ]
-        },) if full_access_entries else ()
+        full_access_statement_tuple = (
+            (full_access_statement.to_dict(),)
+            if full_access_statement.resource
+            else ()
+        )
 
         statement = [
-            *full_access_statement,
+            *full_access_statement_tuple,
             *(
                 statement
                 for entry in partial_access_entries
                 for statement in self._generate_iam_statements(entry)
             )
         ]
-        policy = {
-            "Version": "2012-10-17",
-            "Statement": statement or [
-                # Special case noop statement that will never match anything.
-                # We need this because IAM doesn't allow empty statement lists
-                {
-                    "Effect": "Allow",
-                    "Action": self.permissions,
-                    "Resource": ["*"],
-                    "Condition": {
-                        "StringNotLike": {
-                            "s3:prefix": [""]
-                        }
-                    }
-                }
-            ]
-        }
+        if not statement:
+            return None
 
-        return policy
+        return {
+            "Version": "2012-10-17",
+            "Statement": statement
+        }
 
     def _is_whole_bucket_accessible(self, entry: BucketMapEntry) -> bool:
         if entry._access_control is None:
@@ -305,18 +286,17 @@ class IamPolicyGenerator:
         assert entry._access_control, "Public buckets should be handled already"
 
         for condition in self._generate_iam_conditions(entry._access_control):
-            statement = {
-                "Effect": "Allow",
-                "Action": self.permissions,
-                "Resource": [
+            statement = _IamStatement(
+                effect="Allow",
+                action=self.permissions,
+                resource=[
                     f"arn:aws:s3:::{entry.bucket}",
                     f"arn:aws:s3:::{entry.bucket}/*"
-                ]
-            }
-            if condition:
-                statement["Condition"] = condition
+                ],
+                condition=condition
+            )
 
-            yield statement
+            yield statement.to_dict()
 
     def _generate_iam_conditions(self, access_control: dict) -> Generator[dict, None, None]:
         conditions = self._generate_string_match_conditions(access_control)
@@ -397,3 +377,44 @@ class IamPolicyGenerator:
             )
             for not_like, like in allowed_intervals_endpoints.items()
         )
+
+
+class _IamStatement:
+    """A helper for generating valid IAM statements"""
+
+    def __init__(
+        self,
+        effect: Optional[str] = None,
+        action: Iterable[str] = (),
+        resource: Iterable[str] = (),
+        condition: Optional[dict] = None,
+    ):
+        self.effect = effect
+        # Using dict instead of set because sets are unordered.
+        self.action = dict((val, None) for val in action)
+        self.resource = dict((val, None) for val in resource)
+        self.condition = condition
+
+    def add_action(self, value: str):
+        self.action[value] = None
+
+    def add_resource(self, value: str):
+        self.resource[value] = None
+
+    def to_dict(self) -> dict:
+        if not self.effect:
+            raise ValueError("'effect' must have a value")
+        if not self.action:
+            raise ValueError("'action' must have a value")
+        if not self.resource:
+            raise ValueError("'resource' must have a value")
+
+        statement = {
+            "Effect": self.effect,
+            "Action": list(self.action),
+            "Resource": list(self.resource)
+        }
+        if self.condition is not None:
+            statement["Condition"] = self.condition
+
+        return statement
