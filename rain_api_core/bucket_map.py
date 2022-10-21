@@ -240,7 +240,7 @@ class IamPolicyGenerator:
     def _is_accessible(self, required_groups: Optional[set]) -> bool:
         return _is_accessible(required_groups, self.groups)
 
-    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> dict:
+    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
         full_access_statement = _IamStatement(effect="Allow", action=self.permissions)
         partial_access_entries = []
 
@@ -265,25 +265,13 @@ class IamPolicyGenerator:
                 for statement in self._generate_iam_statements(entry)
             )
         ]
-        policy = {
-            "Version": "2012-10-17",
-            "Statement": statement or [
-                # Special case noop statement that will never match anything.
-                # We need this because IAM doesn't allow empty statement lists
-                _IamStatement(
-                    effect="Allow",
-                    action=self.permissions,
-                    resource=["*"],
-                    condition={
-                        "StringNotLike": {
-                            "s3:prefix": [""]
-                        }
-                    }
-                ).to_dict()
-            ]
-        }
+        if not statement:
+            return None
 
-        return policy
+        return {
+            "Version": "2012-10-17",
+            "Statement": statement
+        }
 
     def _is_whole_bucket_accessible(self, entry: BucketMapEntry) -> bool:
         if entry._access_control is None:
