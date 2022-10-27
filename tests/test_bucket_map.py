@@ -32,6 +32,32 @@ def sample_bucket_map():
 
 
 @pytest.fixture
+def sample_bucket_map_iam():
+    # A sample bucket map that is IAM compatible
+    return {
+        "MAP": {
+            "ANY_AUTHED": "authed-bucket",
+            "general-browse": "browse-bucket",
+            "productX": "bucket",
+            "nested": {
+                "nested2a": {
+                    "nested3": "nested-bucket-public"
+                },
+                "nested2b": "nested-bucket-private"
+            }
+        },
+        "PUBLIC_BUCKETS": {
+            "browse-bucket": "General browse Imagery",
+            "bucket/browse": "ProductX Browse Imagery"
+        },
+        "PRIVATE_BUCKETS": {
+            "bucket": ["science_team"],
+            "nested-bucket-private": []
+        }
+    }
+
+
+@pytest.fixture
 def groups_bucket_map():
     return {
         "PATH1": "bucket1",
@@ -538,12 +564,6 @@ def test_to_iam_policy_empty():
     assert b_map.to_iam_policy() is None
 
 
-def test_to_iam_policy_empty_permissions():
-    b_map = BucketMap({})
-
-    assert b_map.to_iam_policy(permissions=("s3:ListBucket",)) is None
-
-
 def test_to_iam_policy_simple():
     bucket_map = {
         "PATH": "bucket-name",
@@ -556,27 +576,6 @@ def test_to_iam_policy_simple():
             {
                 "Effect": "Allow",
                 "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ]
-            }
-        ]
-    }
-
-
-def test_to_iam_policy_simple_permissions():
-    bucket_map = {
-        "PATH": "bucket-name",
-    }
-    b_map = BucketMap(bucket_map)
-
-    assert b_map.to_iam_policy(groups=(), permissions=("s3:ListBucket",)) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
                     "arn:aws:s3:::bucket-name/*"
@@ -643,14 +642,20 @@ def test_to_iam_policy_private_with_public_prefix():
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name/public/*"
+                ]
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
                 ],
                 "Condition": {
                     "StringLike": {
-                        "s3:prefix": ["public/"]
+                        "s3:prefix": ["public/*"]
                     }
                 }
             }
@@ -673,14 +678,22 @@ def test_to_iam_policy_private_with_protected_prefix():
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name/public/*"
+                ]
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
                 ],
                 "Condition": {
                     "StringLike": {
-                        "s3:prefix": ["public/"]
+                        "s3:prefix": [
+                            "public/*"
+                        ]
                     }
                 }
             }
@@ -688,18 +701,17 @@ def test_to_iam_policy_private_with_protected_prefix():
     }
 
 
-def test_to_iam_policy_private_with_protected_prefix_and_private_subprefix():
+def test_to_iam_policy_private_with_protected_prefix_full_access():
     bucket_map = {
         "PATH": "bucket-name",
         "PRIVATE_BUCKETS": {
             "bucket-name": ["science_team"],
-            "bucket-name/browse/": [],
-            "bucket-name/browse/secret/": ["science_team"]
+            "bucket-name/public/": []
         }
     }
     b_map = BucketMap(bucket_map)
 
-    assert b_map.to_iam_policy(groups=()) == {
+    assert b_map.to_iam_policy(groups=("science_team",)) == {
         "Version": "2012-10-17",
         "Statement": [
             {
@@ -708,181 +720,17 @@ def test_to_iam_policy_private_with_protected_prefix_and_private_subprefix():
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
                     "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": ["browse/"]
-                    },
-                    "StringNotLike": {
-                        "s3:prefix": ["browse/secret/"]
-                    }
-                }
+                ]
             }
         ]
     }
 
 
-def test_to_iam_policy_public_with_complex_nesting():
-    bucket_map = {
-        "PATH": "bucket-name",
-        "PUBLIC_BUCKETS": {
-            "bucket-name": "Public top level"
-        },
-        "PRIVATE_BUCKETS": {
-            "bucket-name/closed/": ["science_team"],
-            "bucket-name/closed/open/": [],
-            "bucket-name/closed/open/closed/": ["science_team"],
-            "bucket-name/closed/open/closed/open/": [],
-            "bucket-name/closed/open/closed/open/closed/": ["science_team"]
-        }
-    }
-    b_map = BucketMap(bucket_map)
-
-    assert b_map.to_iam_policy(groups=()) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "closed/",
-                        ]
-                    }
-                }
-            },
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": [
-                            "closed/open/",
-                        ]
-                    },
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "closed/open/closed/",
-                        ]
-                    }
-                }
-            },
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": [
-                            "closed/open/closed/open/",
-                        ]
-                    },
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "closed/open/closed/open/closed/",
-                        ]
-                    }
-                }
-            }
-        ]
-    }
-
-
-def test_to_iam_policy_private_with_complex_nesting():
+def test_to_iam_policy_private_with_multiple_nested_private():
     bucket_map = {
         "PATH": "bucket-name",
         "PRIVATE_BUCKETS": {
-            "bucket-name/": ["science_team"],
-            "bucket-name/open/": [],
-            "bucket-name/open/closed/": ["science_team"],
-            "bucket-name/open/closed/open/": [],
-            "bucket-name/open/closed/open/closed/": ["science_team"],
-            "bucket-name/open/closed/open/closed/open/": []
-        }
-    }
-    b_map = BucketMap(bucket_map)
-
-    assert b_map.to_iam_policy(groups=()) == {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": [
-                            "open/",
-                        ]
-                    },
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "open/closed/",
-                        ]
-                    }
-                }
-            },
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": [
-                            "open/closed/open/",
-                        ]
-                    },
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "open/closed/open/closed/",
-                        ]
-                    }
-                }
-            },
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringLike": {
-                        "s3:prefix": [
-                            "open/closed/open/closed/open/",
-                        ]
-                    }
-                }
-            }
-        ]
-    }
-
-
-def test_to_iam_policy_public_with_multiple_nested_private():
-    bucket_map = {
-        "PATH": "bucket-name",
-        "PUBLIC_BUCKETS": {
-            "bucket-name": "Public imagery"
-        },
-        "PRIVATE_BUCKETS": {
+            "bucket-name": ["science_team"],
             "bucket-name/closed1/": ["science_team"],
             "bucket-name/closed2/": ["science_team"],
             "bucket-name/closed3/": ["science_team"],
@@ -898,34 +746,25 @@ def test_to_iam_policy_public_with_multiple_nested_private():
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:GetObject"],
                 "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "closed1/",
-                            "closed2/",
-                            "closed3/",
-                        ]
-                    }
-                }
+                    "arn:aws:s3:::bucket-name/closed1/open1/*",
+                    "arn:aws:s3:::bucket-name/closed1/open2/*",
+                    "arn:aws:s3:::bucket-name/closed1/open3/*",
+                ]
             },
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
                 ],
                 "Condition": {
                     "StringLike": {
                         "s3:prefix": [
-                            "closed1/open1/",
-                            "closed1/open2/",
-                            "closed1/open3/",
+                            "closed1/open1/*",
+                            "closed1/open2/*",
+                            "closed1/open3/*"
                         ]
                     }
                 }
@@ -934,18 +773,17 @@ def test_to_iam_policy_public_with_multiple_nested_private():
     }
 
 
-def test_to_iam_policy_public_with_many_private_subprefixes():
+def test_to_iam_policy_private_with_multiple_nested_protected_multiple_buckets():
     bucket_map = {
-        "PATH": "bucket-name",
-        "PUBLIC_BUCKETS": {
-            "bucket-name": "Public top level"
-        },
+        "PATH1": "bucket1",
+        "PATH2": "bucket2",
         "PRIVATE_BUCKETS": {
-            "bucket-name/browse/": [],
-            "bucket-name/science/": ["science_team"],
-            "bucket-name/science2/": ["science_team_2"],
-            "bucket-name/science3/": ["science_team_3"],
-            "bucket-name/science4/": ["science_team_4"]
+            "bucket1": ["science_team"],
+            "bucket2": ["science_team"],
+            "bucket1/closed1/": ["science_team"],
+            "bucket2/closed2/": ["science_team"],
+            "bucket1/closed1/open1/": [],
+            "bucket2/closed1/open2/": [],
         }
     }
     b_map = BucketMap(bucket_map)
@@ -955,44 +793,89 @@ def test_to_iam_policy_public_with_many_private_subprefixes():
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:GetObject"],
                 "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": [
-                            "science/",
-                            "science2/",
-                            "science3/",
-                            "science4/"
-                        ]
-                    }
-                }
+                    "arn:aws:s3:::bucket1/closed1/open1/*",
+                    "arn:aws:s3:::bucket2/closed1/open2/*",
+                ]
             },
-            # This statement is redundant, but makes the implementation simpler
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:ListBucket"],
                 "Resource": [
-                    "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
+                    "arn:aws:s3:::bucket1",
                 ],
                 "Condition": {
                     "StringLike": {
                         "s3:prefix": [
-                            "browse/"
+                            "closed1/open1/*",
                         ]
                     }
                 }
             },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket2",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "closed1/open2/*",
+                        ]
+                    }
+                }
+            }
         ]
     }
 
 
-def test_to_iam_policy(sample_bucket_map):
-    b_map = BucketMap(sample_bucket_map, bucket_name_prefix="pre-")
+def test_to_iam_policy_merge_prefix_resources():
+    bucket_map = {
+        "PATH1": "bucket1",
+        "PATH2": "bucket2",
+        "PRIVATE_BUCKETS": {
+            "bucket1": ["science_team"],
+            "bucket2": ["science_team"],
+            "bucket1/theprefix/": [],
+            "bucket2/theprefix/": [],
+        }
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=()) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/theprefix/*",
+                    "arn:aws:s3:::bucket2/theprefix/*",
+                ]
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                    "arn:aws:s3:::bucket2",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "theprefix/*",
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+
+
+def test_to_iam_policy(sample_bucket_map_iam):
+    b_map = BucketMap(sample_bucket_map_iam, bucket_name_prefix="pre-")
 
     assert b_map.to_iam_policy(groups=()) == {
         "Version": "2012-10-17",
@@ -1005,6 +888,7 @@ def test_to_iam_policy(sample_bucket_map):
                     "arn:aws:s3:::pre-authed-bucket/*",
                     "arn:aws:s3:::pre-browse-bucket",
                     "arn:aws:s3:::pre-browse-bucket/*",
+                    "arn:aws:s3:::pre-bucket/browse*",
                     "arn:aws:s3:::pre-nested-bucket-public",
                     "arn:aws:s3:::pre-nested-bucket-public/*",
                     "arn:aws:s3:::pre-nested-bucket-private",
@@ -1013,28 +897,15 @@ def test_to_iam_policy(sample_bucket_map):
             },
             {
                 "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::pre-bucket",
-                    "arn:aws:s3:::pre-bucket/*"
-                ],
-                "Condition": {
-                    "StringNotLike": {
-                        "s3:prefix": ["2020/12"]
-                    }
-                }
-            },
-            # This statement is redundant, but makes the implementation simpler
-            {
-                "Effect": "Allow",
-                "Action": ["s3:GetObject", "s3:ListBucket"],
-                "Resource": [
-                    "arn:aws:s3:::pre-bucket",
-                    "arn:aws:s3:::pre-bucket/*"
                 ],
                 "Condition": {
                     "StringLike": {
-                        "s3:prefix": ["browse"]
+                        "s3:prefix": [
+                            "browse*",
+                        ]
                     }
                 }
             }
