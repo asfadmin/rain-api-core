@@ -65,10 +65,14 @@ class BucketMap():
         self,
         bucket_map: dict,
         bucket_name_prefix: str = "",
-        reverse: bool = False
+        reverse: bool = False,
+        iam_compatible: bool = True
     ):
         self.bucket_map = bucket_map
         self.access_control = _parse_access_control(bucket_map)
+        self._iam_compatible = iam_compatible
+        if iam_compatible:
+            _check_iam_compatible(self.access_control)
         self.bucket_name_prefix = bucket_name_prefix
         self.reverse = reverse
 
@@ -136,6 +140,8 @@ class BucketMap():
         groups: Iterable[str] = None,
         permissions: Iterable[str] = ("s3:GetObject", "s3:ListBucket")
     ) -> dict:
+        if not self._iam_compatible:
+            _check_iam_compatible(self.access_control)
         generator = IamPolicyGenerator(groups, permissions)
         return generator.generate_policy(self.entries())
 
@@ -230,6 +236,65 @@ def _parse_access_control(bucket_map: dict) -> dict:
             obj[""] = _DEFAULT_PERMISSION_FACTORY()
 
     return dict(access)
+
+
+def _check_iam_compatible(access_control: dict):
+    """Check that the access control configuration is compatible with IAM.
+
+    This means nested prefixes must always be accessible to a superset of their
+    parents e.g. if `foo/` is accessible to `group_1` and `group_2`, then
+    `foo/bar/` must also be accessible to at least `group_1` and `group_2`.
+
+    :param access_control: dict of access rules as returned by
+        `_parse_access_control`
+    :raises: ValueError if the access control list contains incompatible rules
+    """
+
+    for bucket, access_rules in access_control.items():
+        for key_prefix, access in reversed(access_rules.items()):
+            longest_prefix = _get_longest_prefix(key_prefix, access_rules)
+            if longest_prefix is None:
+                continue
+
+            parent_access = access_rules[longest_prefix]
+            if access is None:
+                # Public access is always allowed
+                continue
+
+            if parent_access is not None:
+                if not access or parent_access and parent_access <= access:
+                    continue
+
+            raise ValueError(
+                f"Invalid prefix permissions for bucket '{bucket}': "
+                f"'{key_prefix}' has {_access_text(access)} but "
+                f"'{longest_prefix}' has {_access_text(parent_access)}"
+            )
+
+
+def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
+    # NOTE: O(n**2) for n = len(access_control).
+    # Not a big deal unless someone has a seriously insane auto
+    # generated bucketmap that makes heavy use of prefix permissions
+    longest_prefix, _ = max(
+        (
+            (k, len(k))
+            for k in prefixes
+            if key.startswith(k) and key != k
+        ),
+        key=lambda x: x[1],
+        default=(None, 0)
+    )
+    return longest_prefix
+
+
+def _access_text(access) -> str:
+    if access is None:
+        return "public access"
+    if access == set():
+        return "protected access"
+
+    return str(access)
 
 
 class IamPolicyGenerator:

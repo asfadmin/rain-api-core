@@ -274,7 +274,7 @@ def test_entries_nested():
 
 
 def test_entries(sample_bucket_map):
-    b_map = BucketMap(sample_bucket_map)
+    b_map = BucketMap(sample_bucket_map, iam_compatible=False)
 
     assert list(b_map.entries()) == [
         BucketMapEntry(
@@ -334,7 +334,7 @@ def test_entries_with_headers():
 
 
 def test_check_bucket_access(sample_bucket_map):
-    b_map = BucketMap(sample_bucket_map)
+    b_map = BucketMap(sample_bucket_map, iam_compatible=False)
 
     assert BucketMap({}).get("productX") is None
     assert b_map.get("productX") is None
@@ -400,7 +400,7 @@ def test_check_bucket_access_nested_paths():
     assert b_map.get("nested/nested2a/nested3/obj1").is_accessible() is True
 
 
-def test_check_bucket_access_nested_prefixes():
+def test_check_bucket_access_nested_private_first():
     bucket_map = {
         "MAP": {
             "PATH": "bucket"
@@ -412,7 +412,7 @@ def test_check_bucket_access_nested_prefixes():
             "bucket/foo": ["some_permission"]
         }
     }
-    b_map = BucketMap(bucket_map)
+    b_map = BucketMap(bucket_map, iam_compatible=False)
 
     assert b_map.get("PATH/obj1").is_accessible() is False
     assert b_map.get("PATH/foo/obj1").is_accessible() is False
@@ -421,7 +421,7 @@ def test_check_bucket_access_nested_prefixes():
     assert b_map.get("PATH/foo/browse/obj1").is_accessible() is True
 
 
-def test_check_bucket_access_depth():
+def test_check_bucket_access_nested_public_first():
     bucket_map = {
         "MAP": {
             "PATH": "bucket"
@@ -433,13 +433,80 @@ def test_check_bucket_access_depth():
             "bucket/browse/foo": ["some_permission"]
         }
     }
-    b_map = BucketMap(bucket_map)
+    b_map = BucketMap(bucket_map, iam_compatible=False)
 
     assert b_map.get("PATH/obj1").is_accessible() is False
     assert b_map.get("PATH/browse/foo/obj1").is_accessible() is False
     assert b_map.get("PATH/browse/foo/obj1").is_accessible(groups=["some_permission"]) is True
     assert b_map.get("PATH/browse/obj1").is_accessible(groups=["some_permission"]) is True
     assert b_map.get("PATH/browse/obj1").is_accessible() is True
+
+
+def test_check_iam_compatible_nested_private_first():
+    _ = BucketMap(
+        {
+            "PUBLIC_BUCKETS": ["bucket/browse"],
+            "PRIVATE_BUCKETS": {"bucket": ["group_1"]}
+        },
+        iam_compatible=True
+    )
+    _ = BucketMap(
+        {
+            "PRIVATE_BUCKETS": {
+                "bucket": ["group_1"],
+                "bucket/foo/": ["group_1", "group_2"]
+            }
+        },
+        iam_compatible=True
+    )
+    _ = BucketMap(
+        {
+            "PRIVATE_BUCKETS": {
+                "bucket": ["group_1"],
+                "bucket/foo/": []
+            }
+        },
+        iam_compatible=True
+    )
+
+
+def test_check_iam_compatible_nested_protected_then_private():
+    with pytest.raises(ValueError):
+        _ = BucketMap(
+            {
+                "PRIVATE_BUCKETS": {
+                    "bucket/foo/": ["group_1"]
+                }
+            },
+            iam_compatible=True
+        )
+
+    with pytest.raises(ValueError):
+        _ = BucketMap(
+            {
+                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]}
+            },
+            iam_compatible=True
+        )
+
+
+def test_check_iam_compatible_nested_public_first():
+    with pytest.raises(ValueError, match="'' has public access"):
+        _ = BucketMap(
+            {
+                "PUBLIC_BUCKETS": ["bucket"],
+                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]}
+            },
+            iam_compatible=True
+        )
+    with pytest.raises(ValueError, match="'foo' has protected access"):
+        _ = BucketMap(
+            {
+                "PUBLIC_BUCKETS": ["bucket"],
+                "PRIVATE_BUCKETS": {"bucket/foo": []}
+            },
+            iam_compatible=True
+        )
 
 
 def test_check_bucket_access_malformed():
@@ -455,7 +522,7 @@ def test_check_bucket_access_malformed():
 
 
 def test_get_required_groups(sample_bucket_map):
-    b_map = BucketMap(sample_bucket_map)
+    b_map = BucketMap(sample_bucket_map, iam_compatible=False)
 
     assert b_map.get("productX/obj1").get_required_groups() == set()
     assert b_map.get("ANY_AUTHED/obj1").get_required_groups() == set()
@@ -973,6 +1040,19 @@ def test_to_iam_policy(sample_bucket_map):
             }
         ]
     }
+
+
+def test_to_iam_policy_checks_compatibility():
+    bucket_map = {
+        "PATH": "bucket",
+        "PRIVATE_BUCKETS": {
+            "bucket/foo/": ["group"]
+        }
+    }
+    b_map = BucketMap(bucket_map, iam_compatible=False)
+
+    with pytest.raises(ValueError, match="'foo/' has {'group'}"):
+        b_map.to_iam_policy()
 
 
 @pytest.mark.parametrize("groups", (None, (), ("foo")))
