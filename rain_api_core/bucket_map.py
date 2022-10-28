@@ -65,10 +65,14 @@ class BucketMap():
         self,
         bucket_map: dict,
         bucket_name_prefix: str = "",
-        reverse: bool = False
+        reverse: bool = False,
+        iam_compatible: bool = True
     ):
         self.bucket_map = bucket_map
         self.access_control = _parse_access_control(bucket_map)
+        self._iam_compatible = iam_compatible
+        if iam_compatible:
+            _check_iam_compatible(self.access_control)
         self.bucket_name_prefix = bucket_name_prefix
         self.reverse = reverse
 
@@ -131,12 +135,10 @@ class BucketMap():
                 headers=headers
             )
 
-    def to_iam_policy(
-        self,
-        groups: Iterable[str] = None,
-        permissions: Iterable[str] = ("s3:GetObject", "s3:ListBucket")
-    ) -> dict:
-        generator = IamPolicyGenerator(groups, permissions)
+    def to_iam_policy(self, groups: Iterable[str] = None) -> dict:
+        if not self._iam_compatible:
+            _check_iam_compatible(self.access_control)
+        generator = IamPolicyGenerator(groups)
         return generator.generate_policy(self.entries())
 
     def _get_map(self) -> dict:
@@ -232,151 +234,152 @@ def _parse_access_control(bucket_map: dict) -> dict:
     return dict(access)
 
 
+def _check_iam_compatible(access_control: dict):
+    """Check that the access control configuration is compatible with IAM.
+
+    This means nested prefixes must always be accessible to a superset of their
+    parents e.g. if `foo/` is accessible to `group_1` and `group_2`, then
+    `foo/bar/` must also be accessible to at least `group_1` and `group_2`.
+
+    :param access_control: dict of access rules as returned by
+        `_parse_access_control`
+    :raises: ValueError if the access control list contains incompatible rules
+    """
+
+    for bucket, access_rules in access_control.items():
+        for key_prefix, access in reversed(access_rules.items()):
+            longest_prefix = _get_longest_prefix(key_prefix, access_rules)
+            if longest_prefix is None:
+                continue
+
+            parent_access = access_rules[longest_prefix]
+            if access is None:
+                # Public access is always allowed
+                continue
+
+            if parent_access is not None:
+                if not access or parent_access and parent_access <= access:
+                    continue
+
+            raise ValueError(
+                f"Invalid prefix permissions for bucket '{bucket}': "
+                f"'{key_prefix}' has {_access_text(access)} but "
+                f"'{longest_prefix}' has {_access_text(parent_access)}"
+            )
+
+
+def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
+    # NOTE: O(n**2) for n = len(access_control).
+    # Not a big deal unless someone has a seriously insane auto
+    # generated bucketmap that makes heavy use of prefix permissions
+    longest_prefix, _ = max(
+        (
+            (k, len(k))
+            for k in prefixes
+            if key.startswith(k) and key != k
+        ),
+        key=lambda x: x[1],
+        default=(None, 0)
+    )
+    return longest_prefix
+
+
+def _access_text(access) -> str:
+    if access is None:
+        return "public access"
+    if access == set():
+        return "protected access"
+
+    return str(access)
+
+
 class IamPolicyGenerator:
-    def __init__(self, groups: Iterable[str], permissions: Iterable[str]):
+    def __init__(self, groups: Iterable[str]):
         self.groups = groups
-        self.permissions = list(permissions)
 
     def _is_accessible(self, required_groups: Optional[set]) -> bool:
         return _is_accessible(required_groups, self.groups)
 
     def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
-        full_access_statement = _IamStatement(effect="Allow", action=self.permissions)
-        partial_access_entries = []
+        # Dedupe across buckets
+        bucket_access = {
+            entry.bucket: entry._access_control
+            for entry in entries
+        }
 
-        for entry in entries:
-            if self._is_whole_bucket_accessible(entry):
-                full_access_statement.add_resource(f"arn:aws:s3:::{entry.bucket}")
-                full_access_statement.add_resource(f"arn:aws:s3:::{entry.bucket}/*")
-            else:
-                partial_access_entries.append(entry)
+        get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
+        list_bucket_prefixes = defaultdict(list)
+        for bucket, access_control in bucket_access.items():
+            consolidated = self._consolidate_access_rules(access_control)
 
-        full_access_statement_tuple = (
-            (full_access_statement.to_dict(),)
-            if full_access_statement.resource
-            else ()
-        )
+            for key_prefix, _ in reversed(consolidated.items()):
+                if key_prefix:
+                    list_bucket_prefixes[key_prefix].append(bucket)
+                else:
+                    get_object_statement.add_action("s3:ListBucket")
+                    get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
 
-        statement = [
-            *full_access_statement_tuple,
-            *(
-                statement
-                for entry in partial_access_entries
-                for statement in self._generate_iam_statements(entry)
-            )
-        ]
-        if not statement:
+                get_object_statement.add_resource(f"arn:aws:s3:::{bucket}/{key_prefix}*")
+
+        if not get_object_statement.resource:
             return None
+
+        # Merge prefixes when all resources match
+        list_bucket_conditions = defaultdict(list)
+        for prefix, buckets in list_bucket_prefixes.items():
+            list_bucket_conditions[tuple(sorted(buckets))].append(prefix)
 
         return {
             "Version": "2012-10-17",
-            "Statement": statement
+            "Statement": [
+                get_object_statement.to_dict(),
+                *(
+                    _IamStatement(
+                        effect="Allow",
+                        action=["s3:ListBucket"],
+                        resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
+                        condition={
+                            "StringLike": {
+                                "s3:prefix": [f"{prefix}*" for prefix in prefixes]
+                            }
+                        }
+                    ).to_dict()
+                    for buckets, prefixes in list_bucket_conditions.items()
+                )
+            ]
         }
 
-    def _is_whole_bucket_accessible(self, entry: BucketMapEntry) -> bool:
-        if entry._access_control is None:
-            return True
+    def _consolidate_access_rules(self, access_control: Optional[dict]) -> dict:
+        """Removes redundant rules by finding the shortest prefixes that
+        are accessible.
 
-        return all(
-            self._is_accessible(required_groups)
-            for required_groups in entry._access_control.values()
-        )
+        For example if our access rules look like this:
+        {
+            "key1/foo/bar": None,
+            "key1/bar/baz": set(),
+            "key1/": {"group", "group2"},
+            "key2/": {"group", "group2", "group3"},
+            "key3/": {"group2", "group3"},
+            "": {"group2"}
+        }
 
-    def _generate_iam_statements(self, entry: BucketMapEntry) -> Generator[dict, None, None]:
-        assert entry._access_control, "Public buckets should be handled already"
-
-        for condition in self._generate_iam_conditions(entry._access_control):
-            statement = _IamStatement(
-                effect="Allow",
-                action=self.permissions,
-                resource=[
-                    f"arn:aws:s3:::{entry.bucket}",
-                    f"arn:aws:s3:::{entry.bucket}/*"
-                ],
-                condition=condition
-            )
-
-            yield statement.to_dict()
-
-    def _generate_iam_conditions(self, access_control: dict) -> Generator[dict, None, None]:
-        conditions = self._generate_string_match_conditions(access_control)
-
-        for string_like, string_not_like in conditions:
-            condition = {}
-            if string_like:
-                condition["StringLike"] = {
-                    "s3:prefix": string_like
-                }
-            if string_not_like:
-                condition["StringNotLike"] = {
-                    "s3:prefix": string_not_like
-                }
-
-            yield condition
-
-    def _generate_string_match_conditions(
-        self,
-        access_control: dict
-    ) -> Generator[Tuple[list, list], None, None]:
-        """Generate StringLike and StringNotLike lists needed to describe
-        bucket permissions in IAM policy terms.
-
-        Each pair of lists should be added as conditions on new allow
-        statement for the entire bucket.
+        Our consolidated access rules for a user in 'group' look like this:
+        {
+            "key1/": {"group", "group2"},
+            "key2/": {"group", "group2", "group3"},
+        }
         """
-        # Since we are limited to using prefix matching, we can only describe
-        # one nested interval per IAM statement.
-        #     public/private/public/
-        #     ^^^^^^^ allow
-        #     ^^^^^^^^^^^^^^^ deny
-        # Will allow anything in public/ but not public/private/. If we need to
-        # allow more stuff in public/private/public/ we'll need to use a second
-        # IAM statement for that.
+        if access_control is None:
+            return {"": None}
 
-        # Find all prefix intervals which we should be allowed to access
-        # Examples (allow, deny):
-        #    (public/, public/private/)
-        #    (public/private/public, public/private/public/private)
-        #    (, private/)
-        allowed_intervals = {}
+        consolidated = {}
         for key_prefix, access in reversed(access_control.items()):
             if self._is_accessible(access):
-                assert key_prefix not in allowed_intervals
-                allowed_intervals[key_prefix] = []
-                continue
+                longest_prefix = _get_longest_prefix(key_prefix, consolidated)
+                if longest_prefix is None:
+                    consolidated[key_prefix] = access
 
-            # NOTE: O(n**2) for n = len(access_control).
-            # Not a big deal unless someone has a seriously insane auto
-            # generated bucketmap that makes heavy use of prefix permissions
-            longest_prefix, _ = max(
-                ((k, len(k)) for k in allowed_intervals if key_prefix.startswith(k)),
-                key=lambda x: x[1],
-                default=(None, 0)
-            )
-            if longest_prefix is None:
-                continue
-
-            allowed_intervals[longest_prefix].append(key_prefix)
-
-        # Merge endpoints
-        # For example we may have a bunch of open intervals:
-        #     (public1/, )
-        #     (public2/, )
-        # Which should be merged into a single condition
-        allowed_intervals_endpoints = defaultdict(list)
-        for start_point, end_points in allowed_intervals.items():
-            allowed_intervals_endpoints[tuple(end_points)].append(start_point)
-
-        # Transform output so it makes more sense to humans
-        # Reversing list order is purely aesthetic so that the generated
-        # condition values are in the same order as in the bucket map.
-        yield from (
-            (
-                [s for s in like[::-1] if s],
-                [s for s in not_like[::-1] if s]
-            )
-            for not_like, like in allowed_intervals_endpoints.items()
-        )
+        return consolidated
 
 
 class _IamStatement:
