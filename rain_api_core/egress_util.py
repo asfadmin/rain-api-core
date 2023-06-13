@@ -28,6 +28,7 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
     datez = timez[:8]
     region_id = "." + region_name if region_name != "us-east-1" else ""
     hostname = f"{bucket_name}.s3{region_id}.amazonaws.com"
+    object_name = urllib.parse.quote(object_name)
 
     cred = session['Credentials']['AccessKeyId']
     secret = session['Credentials']['SecretAccessKey']
