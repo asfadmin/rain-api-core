@@ -20,34 +20,34 @@ def get_bucket_name_prefix() -> str:
 
 
 def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
-    return hmac.new(key, string.encode('utf-8'), sha256)
+    return hmac.new(key, string.encode(), sha256)
 
 
 def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET') -> str:
     timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     datez = timez[:8]
-    hostname = "{0}.s3{1}.amazonaws.com".format(bucket_name, "." + region_name if region_name != "us-east-1" else "")
+    region_id = "." + region_name if region_name != "us-east-1" else ""
+    hostname = f"{bucket_name}.s3{region_id}.amazonaws.com"
+    object_name = urllib.parse.quote(object_name)
 
     cred = session['Credentials']['AccessKeyId']
     secret = session['Credentials']['SecretAccessKey']
     token = session['Credentials']['SessionToken']
 
     aws4_request = "/".join([datez, region_name, "s3", "aws4_request"])
-    cred_string = "{0}/{1}".format(cred, aws4_request)
+    cred_string = f"{cred}/{aws4_request}"
 
-    # Canonical Query String Parts
-    parts = ["A-userid={0}".format(user_id),
-             "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-             "X-Amz-Credential="+urllib.parse.quote_plus(cred_string),
-             "X-Amz-Date="+timez,
-             "X-Amz-Expires={0}".format(expire_seconds),
-             "X-Amz-Security-Token="+urllib.parse.quote_plus(token),
-             "X-Amz-SignedHeaders=host"]
+    can_query_string = "&".join([
+        f"A-userid={user_id}",
+        "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+        "X-Amz-Credential=" + urllib.parse.quote_plus(cred_string),
+        "X-Amz-Date=" + timez,
+        f"X-Amz-Expires={expire_seconds}",
+        "X-Amz-Security-Token=" + urllib.parse.quote_plus(token),
+        "X-Amz-SignedHeaders=host"
+    ])
 
-    can_query_string = "&".join(parts)
-
-    # Canonical Requst
-    can_req = (
+    can_request = (
         f"{method}\n"
         f"/{object_name}\n"
         f"{can_query_string}\n"
@@ -55,20 +55,20 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
         "host\n"
         "UNSIGNED-PAYLOAD"
     )
-    can_req_hash = sha256(can_req.encode('utf-8')).hexdigest()
+    can_request_hash = sha256(can_request.encode()).hexdigest()
 
-    # String to Sign
-    stringtosign = "\n".join(["AWS4-HMAC-SHA256", timez, aws4_request, can_req_hash])
+    string_to_sign = "\n".join([
+        "AWS4-HMAC-SHA256",
+        timez,
+        aws4_request,
+        can_request_hash
+    ])
 
-    # Signing Key
-    StepOne = hmacsha256("AWS4{0}".format(secret).encode('utf-8'), datez).digest()
-    StepTwo = hmacsha256(StepOne, region_name).digest()
-    StepThree = hmacsha256(StepTwo, "s3").digest()
-    SigningKey = hmacsha256(StepThree, "aws4_request").digest()
+    step_one = hmacsha256(f"AWS4{secret}".encode(), datez).digest()
+    step_two = hmacsha256(step_one, region_name).digest()
+    step_three = hmacsha256(step_two, "s3").digest()
+    signing_key = hmacsha256(step_three, "aws4_request").digest()
 
-    # Final Signature
-    Signature = hmacsha256(SigningKey, stringtosign).hexdigest()
+    signature = hmacsha256(signing_key, string_to_sign).hexdigest()
 
-    # Dump URL
-    url = "https://" + hostname + "/" + object_name + "?" + can_query_string + "&X-Amz-Signature=" + Signature
-    return url
+    return f"https://{hostname}/{object_name}?{can_query_string}&X-Amz-Signature={signature}"
