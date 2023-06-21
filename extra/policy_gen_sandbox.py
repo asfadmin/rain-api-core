@@ -31,10 +31,14 @@ def main():
             policy_text = json.dumps(policy, indent=2)
             txt_policy.delete("1.0", tk.END)
             txt_policy.insert(tk.END, policy_text)
+
+            minified_policy_text = json.dumps(policy, separators=(":", ","))
+            var_size.set(str(len(minified_policy_text)))
         except Exception:
             exc_text = traceback.format_exc()
             txt_policy.delete("1.0", tk.END)
             txt_policy.insert(tk.END, exc_text)
+            var_size.set("0")
 
     # Bucket map panel
     tk.Label(frm_content, text="Bucket map YAML").grid(row=0, column=0)
@@ -51,6 +55,17 @@ def main():
 
     txt_policy = tk.Text(frm_content)
     txt_policy.grid(row=1, column=1, sticky="nsew")
+
+    # Minified size indicator
+    frm_size = tk.Frame(frm_content)
+    frm_size.grid(row=2, column=1)
+
+    tk.Label(frm_size, text="Minified Size: ").grid(row=0, column=0)
+
+    var_size = tk.StringVar(value="0")
+    tk.Label(frm_size, textvariable=var_size).grid(row=0, column=1)
+
+    tk.Label(frm_size, text=" (max 2048)").grid(row=0, column=2)
 
     window.mainloop()
 
