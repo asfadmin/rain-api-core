@@ -397,6 +397,70 @@ def test_check_bucket_access_conflicting():
     assert b_map.get("PATH/obj1").is_accessible(groups=["some_permission"]) is True
 
 
+def test_check_bucket_access_longest_prefix_first():
+    # Longer prefixes should be checked first
+    bucket_map = {
+        "MAP": {
+            "PATH": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "bucket"
+        ],
+        "PRIVATE_BUCKETS": {
+            "bucket/foobar": ["other_permission"],
+            "bucket/foo": ["some_permission"],
+        }
+    }
+    b_map = BucketMap(bucket_map, iam_compatible=False)
+
+    assert b_map.get("PATH/foobar").is_accessible() is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["some_permission"]) is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["other_permission"]) is True
+
+
+def test_check_bucket_access_longest_prefix_first_order():
+    # Longer prefixes should be checked first
+    bucket_map = {
+        "MAP": {
+            "PATH": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "bucket"
+        ],
+        "PRIVATE_BUCKETS": {
+            "bucket/foo": ["some_permission"],
+            "bucket/foobar": ["other_permission"],
+        }
+    }
+    b_map = BucketMap(bucket_map, iam_compatible=False)
+
+    assert b_map.get("PATH/foobar").is_accessible() is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["some_permission"]) is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["other_permission"]) is True
+
+
+def test_check_bucket_access_longest_prefix_first_conflicting():
+    # Longer prefixes should be checked first
+    bucket_map = {
+        "MAP": {
+            "PATH": "bucket"
+        },
+        "PUBLIC_BUCKETS": [
+            "bucket/foo",
+            "bucket/foobar"
+        ],
+        "PRIVATE_BUCKETS": {
+            "bucket/foo": ["some_permission"],
+            "bucket/foobar": ["other_permission"],
+        }
+    }
+    b_map = BucketMap(bucket_map, iam_compatible=False)
+
+    assert b_map.get("PATH/foobar").is_accessible() is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["some_permission"]) is False
+    assert b_map.get("PATH/foobar").is_accessible(groups=["other_permission"]) is True
+
+
 def test_check_bucket_access_nested_paths():
     bucket_map = {
         "MAP": {
