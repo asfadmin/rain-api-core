@@ -20,12 +20,13 @@ def main():
     frm_content.grid(row=0, column=0, sticky="nsew")
 
     def handle_text():
-        text = txt_bucketmap.get("1.0", tk.END)
+        text = txt_bucketmap.get("1.0", tk.END).strip()
         try:
             groups = yaml.safe_load(var_group.get())
-            bucket_map = yaml.safe_load(text)
-            if bucket_map is None:
-                return
+            if not text:
+                bucket_map = {}
+            else:
+                bucket_map = yaml.safe_load(text)
             b_map = BucketMap(bucket_map)
 
             policy = b_map.to_iam_policy(groups)
@@ -81,6 +82,7 @@ def main():
 
     tk.Label(frm_size, text=" (max 2048)").grid(row=0, column=2)
 
+    handle_text()
     window.mainloop()
 
 
