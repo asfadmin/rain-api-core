@@ -22,12 +22,13 @@ def main():
     def handle_text():
         text = txt_bucketmap.get("1.0", tk.END)
         try:
+            groups = yaml.safe_load(var_group.get())
             bucket_map = yaml.safe_load(text)
             if bucket_map is None:
                 return
             b_map = BucketMap(bucket_map)
 
-            policy = b_map.to_iam_policy()
+            policy = b_map.to_iam_policy(groups)
             policy_text = json.dumps(policy, indent=2)
             txt_policy.delete("1.0", tk.END)
             txt_policy.insert(tk.END, policy_text)
@@ -55,6 +56,19 @@ def main():
 
     txt_policy = tk.Text(frm_content)
     txt_policy.grid(row=1, column=1, sticky="nsew")
+
+    # Group selector
+    frm_groups = tk.Frame(frm_content)
+    frm_groups.grid(row=2, column=0)
+
+    tk.Label(frm_groups, text="User Groups: ").grid(row=0, column=0)
+    var_group = tk.StringVar(value="null")
+    entry_groups = tk.Entry(frm_groups, textvariable=var_group)
+    entry_groups.bind(
+        "<Key>",
+        lambda _: window.after(1, handle_text)
+    )
+    entry_groups.grid(row=0, column=1)
 
     # Minified size indicator
     frm_size = tk.Frame(frm_content)
