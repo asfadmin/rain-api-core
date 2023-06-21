@@ -10,12 +10,14 @@ from rain_api_core.bucket_map import BucketMap
 def main():
     window = tk.Tk()
     window.title("IAM Policy Generator Sandbox")
-    window.columnconfigure([0, 1], weight=1)
-    window.rowconfigure(0, minsize=800, weight=1)
+    window.columnconfigure(0, weight=1)
+    window.rowconfigure(0, weight=1)
 
-    frm_bucketmap = tk.Frame()
-    tk.Label(frm_bucketmap, text="Bucket map YAML").pack()
-    txt_bucketmap = tk.Text(frm_bucketmap)
+    frm_content = tk.Frame(window)
+    frm_content.columnconfigure(0, weight=1)
+    frm_content.columnconfigure(1, weight=1)
+    frm_content.rowconfigure(1, weight=1)
+    frm_content.grid(row=0, column=0, sticky="nsew")
 
     def handle_text():
         text = txt_bucketmap.get("1.0", tk.END)
@@ -34,20 +36,21 @@ def main():
             txt_policy.delete("1.0", tk.END)
             txt_policy.insert(tk.END, exc_text)
 
+    # Bucket map panel
+    tk.Label(frm_content, text="Bucket map YAML").grid(row=0, column=0)
+
+    txt_bucketmap = tk.Text(frm_content)
     txt_bucketmap.bind(
         "<Key>",
         lambda _: window.after(1, handle_text)
     )
+    txt_bucketmap.grid(row=1, column=0, sticky="nsew")
 
-    txt_bucketmap.pack(expand=True, fill=tk.BOTH)
-    frm_bucketmap.grid(row=0, column=0, sticky="nsew")
+    # Policy panel
+    tk.Label(frm_content, text="Policy JSON").grid(row=0, column=1)
 
-    frm_policy = tk.Frame()
-    tk.Label(frm_policy, text="Policy JSON").pack()
-    txt_policy = tk.Text(frm_policy)
-
-    txt_policy.pack(expand=True, fill=tk.BOTH)
-    frm_policy.grid(row=0, column=1, sticky="nsew")
+    txt_policy = tk.Text(frm_content)
+    txt_policy.grid(row=1, column=1, sticky="nsew")
 
     window.mainloop()
 
