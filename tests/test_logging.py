@@ -10,7 +10,13 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from rain_api_core.logging import JSONFormatter, PercentPlaceholder, TaggingFilter, filter_log_credentials, get_log
+from rain_api_core.logging import (
+    JSONFormatter,
+    PercentPlaceholder,
+    TaggingFilter,
+    filter_log_credentials,
+    get_log,
+)
 
 MODULE = "rain_api_core.logging"
 

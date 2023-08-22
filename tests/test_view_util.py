@@ -21,7 +21,7 @@ from rain_api_core.view_util import (
     is_jwt_blacklisted,
     make_jwt_payload,
     make_set_cookie_headers_jwt,
-    set_jwt_blacklist
+    set_jwt_blacklist,
 )
 
 MODULE = "rain_api_core.view_util"
