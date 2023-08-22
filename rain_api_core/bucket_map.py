@@ -216,7 +216,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
 
     # Relying on the fact that `sort` is stable. The order in which we add
     # public/private rules to `access_list` is therefore important.
-    access_list.sort(key=lambda item: item[0].count("/"), reverse=True)
+    access_list.sort(key=lambda item: len(item[0]), reverse=True)
 
     # Convert to dictionary for easier lookup on individual buckets
     # We're relying on python's dictionary keys being insertion ordered
