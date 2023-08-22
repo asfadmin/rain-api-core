@@ -18,7 +18,7 @@ from rain_api_core.aws_util import (
     get_yaml_file,
     read_s3,
     retrieve_secret,
-    role_creds_cache
+    role_creds_cache,
 )
 
 MODULE = "rain_api_core.aws_util"

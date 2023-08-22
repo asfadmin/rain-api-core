@@ -16,7 +16,7 @@ from rain_api_core.urs_util import (
     get_urs_url,
     user_in_group,
     user_in_group_list,
-    user_in_group_urs
+    user_in_group_urs,
 )
 
 MODULE = "rain_api_core.urs_util"
