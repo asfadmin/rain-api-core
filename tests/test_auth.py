@@ -31,7 +31,7 @@ def test_decode_jwt_expired(jwt_manager, jwt_priv_key):
     assert jwt_manager._decode_jwt(encoded) is None
 
 
-def test_decode_jwt_invalid(jwt_manager, jwt_priv_key):
+def test_decode_jwt_invalid(jwt_manager):
     encoded = b".".join((
         jwt.utils.base64url_encode(b'{"alg": "RS256"}'),
         jwt.utils.base64url_encode(b'{"not valid'),
@@ -144,7 +144,6 @@ def test_get_header_to_set_auth_cookie(
     mock_time,
     mock_encode_jwt,
     jwt_manager,
-    jwt_priv_key,
 ):
     jwt_manager.cookie_name = 'auth-cookie'
     jwt_manager.session_ttl = 1
