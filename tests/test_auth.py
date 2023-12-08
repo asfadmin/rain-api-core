@@ -175,3 +175,35 @@ def test_get_header_to_set_auth_cookie(
 def test_get_header_to_set_auth_cookie_logout(jwt_manager):
     header = jwt_manager.get_header_to_set_auth_cookie(None, 'DOMAIN')
     assert header == {'SET-COOKIE': 'auth-cookie=expired; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; Domain=DOMAIN'}
+
+
+@mock.patch(f'{MODULE}.time', autospec=True)
+def test_jwt_manager_session_ttl_sub_hour(mock_time):
+    jwt_manager = JwtManager(
+        "RSA256",
+        "",
+        "private_key",
+        "cookie_name",
+        session_ttl_in_hours=0.5
+    )
+    profile = UserProfile(
+        user_id='test_user_id',
+        token='test_token',
+        groups=['test_group1', 'test_group2'],
+        first_name='test_first_name',
+        last_name='test_last_name',
+        email='test_email',
+    )
+    mock_time.return_value = 1
+
+    payload = jwt_manager._jwt_payload_from_user_profile(profile)
+    assert payload == {
+        'urs-user-id': 'test_user_id',
+        'first_name': 'test_first_name',
+        'last_name': 'test_last_name',
+        'email': 'test_email',
+        'urs-access-token': 'test_token',
+        'urs-groups': ['test_group1', 'test_group2'],
+        'iat': 1,
+        'exp': 1801,
+    }

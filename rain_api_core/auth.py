@@ -56,13 +56,13 @@ class JwtManager:
         private_key: str,
         cookie_name: str,
         blacklist={},
-        session_ttl_in_hours: int = 7 * 24
+        session_ttl_in_hours: float = 7 * 24
     ):
         self.algorithm = algorithm
         self.public_key = public_key
         self.private_key = private_key
         self.cookie_name = cookie_name
-        self.session_ttl = session_ttl_in_hours * 60 * 60
+        self.session_ttl = int(session_ttl_in_hours * 60 * 60)
         self.black_list = blacklist
 
     def _get_auth_cookie(self, headers: Mapping[str, str]):
