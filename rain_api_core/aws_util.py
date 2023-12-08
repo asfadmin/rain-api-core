@@ -214,9 +214,10 @@ def get_role_session(creds: dict = None, user_id: str = None) -> boto_Session:
     if session_id not in session_cache:
         now = time()
         session_cache[session_id] = boto_Session(
-                                        aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
-                                        aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
-                                        aws_session_token=sts_resp['Credentials']['SessionToken'])
+            aws_access_key_id=sts_resp['Credentials']['AccessKeyId'],
+            aws_secret_access_key=sts_resp['Credentials']['SecretAccessKey'],
+            aws_session_token=sts_resp['Credentials']['SessionToken']
+        )
         log.info(return_timing_object(service="boto3", endpoint="boto3.session()", duration=duration(now)))
     else:
         log.info("Reusing session {0}".format(session_id))
