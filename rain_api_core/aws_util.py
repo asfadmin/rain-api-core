@@ -72,7 +72,7 @@ def retrieve_secret(secret_name: str) -> dict:
             duration=duration(timer)
         ))
     except ClientError as e:
-        log.error("Encountered fatal error trying to reading URS Secret: {0}".format(e))
+        log.error("Encountered fatal error trying to read URS Secret: {0}".format(e))
         raise e
     else:
         # Decrypts secret using the associated KMS CMK.
