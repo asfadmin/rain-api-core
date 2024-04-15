@@ -56,7 +56,6 @@ def get_presigned_url(
         "X-Amz-SignedHeaders=host"
     ])
 
-    # Add the api_request_uuid header only if it is available
     if api_request_uuid is not None:
         can_query_string = "&".join([
             f"A-api-request-uuid={api_request_uuid}",
