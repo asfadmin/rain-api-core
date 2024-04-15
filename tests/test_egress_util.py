@@ -117,6 +117,7 @@ def test_get_presigned_url_with_newlines(mock_datetime):
         "&X-Amz-Signature=b5f7dab0ba1af2a1a5c625f526de6ab8047a20f165675890cfa8caf70cfed730"
     )
 
+
 @mock.patch(f"{MODULE}.datetime", autospec=True)
 def test_get_presigned_url_with_api_request_uuid(mock_datetime):
     mock_datetime.utcnow.return_value = datetime(2024, 1, 1)
@@ -127,7 +128,15 @@ def test_get_presigned_url_with_api_request_uuid(mock_datetime):
             "SessionToken": "session_token"
         }
     }
-    presigned_url = get_presigned_url(session, "bucket_name", "object_name", "region_name", 500, "user_id", api_request_uuid="uuid_value")
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "object_name",
+        "region_name",
+        500,
+        "user_id",
+        api_request_uuid="uuid_value"
+    )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/object_name"
         "?A-api-request-uuid=uuid_value"
