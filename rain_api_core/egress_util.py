@@ -23,7 +23,16 @@ def hmacsha256(key: bytes, string: str) -> hmac.HMAC:
     return hmac.new(key, string.encode(), sha256)
 
 
-def get_presigned_url(session, bucket_name, object_name, region_name, expire_seconds, user_id, method='GET') -> str:
+def get_presigned_url(
+    session,
+    bucket_name,
+    object_name,
+    region_name,
+    expire_seconds,
+    user_id,
+    method='GET',
+    api_request_uuid=None
+) -> str:
     timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
     datez = timez[:8]
     region_id = "." + region_name if region_name != "us-east-1" else ""
@@ -46,6 +55,12 @@ def get_presigned_url(session, bucket_name, object_name, region_name, expire_sec
         "X-Amz-Security-Token=" + urllib.parse.quote_plus(token),
         "X-Amz-SignedHeaders=host"
     ])
+
+    if api_request_uuid is not None:
+        can_query_string = "&".join([
+            f"A-api-request-uuid={api_request_uuid}",
+            can_query_string,
+        ])
 
     can_request = (
         f"{method}\n"

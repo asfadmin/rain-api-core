@@ -116,3 +116,36 @@ def test_get_presigned_url_with_newlines(mock_datetime):
         "&X-Amz-SignedHeaders=host"
         "&X-Amz-Signature=b5f7dab0ba1af2a1a5c625f526de6ab8047a20f165675890cfa8caf70cfed730"
     )
+
+
+@mock.patch(f"{MODULE}.datetime", autospec=True)
+def test_get_presigned_url_with_api_request_uuid(mock_datetime):
+    mock_datetime.utcnow.return_value = datetime(2024, 1, 1)
+    session = {
+        "Credentials": {
+            "AccessKeyId": "access_key_id",
+            "SecretAccessKey": "secret_access_key",
+            "SessionToken": "session_token"
+        }
+    }
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "object_name",
+        "region_name",
+        500,
+        "user_id",
+        api_request_uuid="uuid_value"
+    )
+    assert presigned_url == (
+        "https://bucket_name.s3.region_name.amazonaws.com/object_name"
+        "?A-api-request-uuid=uuid_value"
+        "&A-userid=user_id"
+        "&X-Amz-Algorithm=AWS4-HMAC-SHA256"
+        "&X-Amz-Credential=access_key_id%2F20240101%2Fregion_name%2Fs3%2Faws4_request"
+        "&X-Amz-Date=20240101T000000Z"
+        "&X-Amz-Expires=500"
+        "&X-Amz-Security-Token=session_token"
+        "&X-Amz-SignedHeaders=host"
+        "&X-Amz-Signature=3010924b3725f8b47a3486ea4005f658128ddc5dde5ca405dfe1bd69bd2ae7a8"
+    )
