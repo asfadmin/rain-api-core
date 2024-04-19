@@ -26,6 +26,7 @@ jobs:
     - run: py.test --cov=rain_api_core --cov-report=term-missing --cov-report=xml --cov-branch --doctest-modules rain_api_core tests
 
     - name: Report coverage
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
