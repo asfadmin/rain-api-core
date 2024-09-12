@@ -5,10 +5,10 @@ from unittest import mock
 
 import boto3
 import jwt
-import moto
 import pytest
 from hypothesis import assume, given, note
 from hypothesis import strategies as st
+from moto import mock_aws
 
 from rain_api_core.view_util import (
     TemplateManager,
@@ -71,7 +71,7 @@ def test_get_jwt_keys_error(mock_retrieve_secret):
         _ = get_jwt_keys()
 
 
-@moto.mock_s3
+@mock_aws
 def test_download_templates(local_cachedir):
     bucket = "test_bucket"
     template_dir = "templates/"
@@ -90,7 +90,7 @@ def test_download_templates(local_cachedir):
             assert f.read() == contents
 
 
-@moto.mock_s3
+@mock_aws
 def test_download_templates_none_available(local_cachedir):
     bucket = "test_bucket"
     client = boto3.client("s3")
@@ -102,7 +102,7 @@ def test_download_templates_none_available(local_cachedir):
     assert list(local_cachedir.iterdir()) == []
 
 
-@moto.mock_s3
+@mock_aws
 def test_download_templates_missing_bucket(local_cachedir):
     manager = TemplateManager("does_not_exist", "templates", cache_dir=local_cachedir)
     manager.download_templates()
@@ -110,7 +110,7 @@ def test_download_templates_missing_bucket(local_cachedir):
     assert list(local_cachedir.iterdir()) == []
 
 
-@moto.mock_s3
+@mock_aws
 def test_download_templates_missing_template_dir(local_cachedir):
     manager = TemplateManager("does_not_exist", "", cache_dir=local_cachedir)
     manager.download_templates()
@@ -132,7 +132,7 @@ def test_render_missing_template(template_dir):
     assert rendered == "Cannot find the HTML template directory"
 
 
-@moto.mock_s3
+@mock_aws
 def test_render_wait_for_templates(local_cachedir):
     bucket = "test_bucket"
     template_dir = "templates/"
