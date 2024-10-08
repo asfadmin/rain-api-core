@@ -5,6 +5,7 @@ from typing import (
     Generator,
     Iterable,
     List,
+    Literal,
     Optional,
     Sequence,
     Set,
@@ -16,8 +17,9 @@ from typing import (
 # represented by an empty set.
 _DEFAULT_PERMISSION_FACTORY = set
 
-AccessPermission = Union[Set[str], None]
+AccessPermission = Union[Set[str], None, Literal[False]]
 PublicAccess = None
+NoAccess: Literal[False] = False
 
 
 def _is_accessible(
@@ -27,6 +29,9 @@ def _is_accessible(
     # Check for public access
     if required_groups is PublicAccess:
         return True
+
+    if required_groups is NoAccess:
+        return False
 
     # At this point public access is not allowed
     if groups is None:
@@ -63,6 +68,7 @@ class BucketMapEntry():
 
         :returns: Set[str] -- Can access the object if any permission matches
         :returns: None -- The object has public access
+        :returns: False -- The object cannot be accessed by anyone
         """
         if not self._access_control:
             return _DEFAULT_PERMISSION_FACTORY()
@@ -184,7 +190,7 @@ def _walk_entries(node: dict, path=()) -> Generator[Tuple[str, tuple, Optional[d
     """A generator to recursively yield all leaves of a bucket map"""
 
     for key, val in node.items():
-        if key in ("PUBLIC_BUCKETS", "PRIVATE_BUCKETS"):
+        if key in ("PUBLIC_BUCKETS", "PRIVATE_BUCKETS", "NOACCESS_BUCKETS"):
             continue
 
         path_parts = (*path, key)
@@ -223,6 +229,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     """
     public_buckets = bucket_map.get("PUBLIC_BUCKETS", ())
     private_buckets = bucket_map.get("PRIVATE_BUCKETS", {})
+    no_access_buckets = bucket_map.get("NOACCESS_BUCKETS", ())
 
     try:
         access_list: List[Tuple[str, AccessPermission]] = [
@@ -231,6 +238,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     except TypeError:
         access_list = []
     access_list.extend((rule, set(groups)) for rule, groups in private_buckets.items())
+    access_list.extend((rule, NoAccess) for rule in no_access_buckets)
 
     # Relying on the fact that `sort` is stable. The order in which we add
     # public/private rules to `access_list` is therefore important.
@@ -271,8 +279,10 @@ def _check_iam_compatible(access_control: dict):
                 continue
 
             parent_access = access_rules[longest_prefix]
-            if access is PublicAccess:
+            if access is PublicAccess or parent_access is NoAccess:
                 # Public access is always allowed.
+                # If the parent has no access, then it is impossible for the
+                # child to be more restrictive, so any permission is allowed.
                 continue
 
             if parent_access is not PublicAccess:
@@ -305,6 +315,8 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
 def _access_text(access) -> str:
     if access is PublicAccess:
         return "public access"
+    if access is NoAccess:
+        return "no access"
     if access == set():
         return "protected access"
 
