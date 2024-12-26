@@ -125,7 +125,9 @@ def test_get_urs_url(mock_get_urs_creds, context):
 
 
 @mock.patch(f"{MODULE}.EdlClient", autospec=True)
-def test_get_profile(mock_client):
+@mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
+def test_get_profile(mock_get_urs_creds, mock_client):
+    mock_get_urs_creds.return_value = {"UrsId": "URS_ID"}
     mock_client().request.return_value = {
         "uid": "user_id",
         "first_name": "John",
@@ -140,13 +142,20 @@ def test_get_profile(mock_client):
 
     profile = get_profile("user_id", "token", "temptoken")
     assert profile.user_id == "user_id"
+
     assert get_profile(None, "token") is None
     assert get_profile("user_id", None) is None
 
 
 @mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_new_token_and_profile", autospec=True)
-def test_get_profile_error(mock_get_new_token_and_profile, mock_client):
+@mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
+def test_get_profile_error(
+    mock_get_urs_creds,
+    mock_get_new_token_and_profile,
+    mock_client,
+):
+    mock_get_urs_creds.return_value = {"UrsId": "URS_ID"}
     mock_get_new_token_and_profile.return_value = {"foo": "bar"}
     mock_client().request.side_effect = EdlException(
         urllib.error.URLError("test error"),
