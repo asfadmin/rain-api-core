@@ -1,10 +1,10 @@
-import json
 import urllib
 from unittest import mock
 
 import pytest
 
 from rain_api_core.auth import JwtManager, UserProfile
+from rain_api_core.edl import EdlException
 from rain_api_core.urs_util import (
     do_auth,
     do_login,
@@ -66,22 +66,24 @@ def test_get_redirect_url(context):
     assert get_redirect_url(context) == "https://example.com/DEV/login"
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
-def test_do_auth(mock_get_urs_creds, mock_request):
+def test_do_auth(mock_get_urs_creds, mock_client):
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
-    mock_response = mock.NonCallableMock()
-    mock_response.read.return_value = '{"foo": "bar"}'
-    mock_request.urlopen.return_value = mock_response
+    mock_client().request.return_value = {"foo": "bar"}
 
     assert do_auth("code", "redir_url") == {"foo": "bar"}
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
-def test_do_auth_error(mock_get_urs_creds, mock_request):
+def test_do_auth_error(mock_get_urs_creds, mock_client):
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
-    mock_request.urlopen.side_effect = urllib.error.URLError("test error")
+    mock_client().request.side_effect = EdlException(
+        urllib.error.URLError("test error"),
+        msg={},
+        payload=None,
+    )
 
     assert do_auth("code", "redir_url") == {}
 
@@ -122,19 +124,15 @@ def test_get_urs_url(mock_get_urs_creds, context):
     )
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
-def test_get_profile(mock_request):
-    mock_response = mock.NonCallableMock()
-    mock_response.read.return_value = json.dumps(
-        {
-            "uid": "user_id",
-            "first_name": "John",
-            "last_name": "Smith",
-            "email_address": "peter.l.smith@nasa.gov",
-            "user_groups": []
-        }
-    )
-    mock_request.urlopen.return_value = mock_response
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
+def test_get_profile(mock_client):
+    mock_client().request.return_value = {
+        "uid": "user_id",
+        "first_name": "John",
+        "last_name": "Smith",
+        "email_address": "peter.l.smith@nasa.gov",
+        "user_groups": [],
+    }
 
     profile = get_profile("user_id", "token")
     assert profile.user_id == "user_id"
@@ -146,11 +144,15 @@ def test_get_profile(mock_request):
     assert get_profile("user_id", None) is None
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_new_token_and_profile", autospec=True)
-def test_get_profile_error(mock_get_new_token_and_profile, mock_request):
+def test_get_profile_error(mock_get_new_token_and_profile, mock_client):
     mock_get_new_token_and_profile.return_value = {"foo": "bar"}
-    mock_request.urlopen.side_effect = urllib.error.URLError("test error")
+    mock_client().request.side_effect = EdlException(
+        urllib.error.URLError("test error"),
+        msg={},
+        payload=None,
+    )
 
     assert get_profile("user_id", "token", "temptoken") is None
     mock_get_new_token_and_profile.assert_not_called()
@@ -159,26 +161,29 @@ def test_get_profile_error(mock_get_new_token_and_profile, mock_request):
     mock_get_new_token_and_profile.assert_called_once_with("user_id", "token", {})
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_profile", autospec=True)
 @mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
-def test_get_new_token_and_profile(mock_get_urs_creds, mock_get_profile, mock_request):
+def test_get_new_token_and_profile(mock_get_urs_creds, mock_get_profile, mock_client):
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
     mock_get_profile.return_value = {"foo": "bar"}
-    mock_response = mock.NonCallableMock()
-    mock_response.read.return_value = '{"access_token": "token"}'
-    mock_request.urlopen.return_value = mock_response
+
+    mock_client().request.return_value = {"access_token": "token"}
 
     assert get_new_token_and_profile("user_id", "cookietoken") == {"foo": "bar"}
     mock_get_profile.assert_called_once_with("user_id", "cookietoken", "token", aux_headers={})
 
 
-@mock.patch(f"{MODULE}.urllib.request", autospec=True)
+@mock.patch(f"{MODULE}.EdlClient", autospec=True)
 @mock.patch(f"{MODULE}.get_profile", autospec=True)
 @mock.patch(f"{MODULE}.get_urs_creds", autospec=True)
-def test_get_new_token_and_profile_error(mock_get_urs_creds, mock_get_profile, mock_request):
+def test_get_new_token_and_profile_error(mock_get_urs_creds, mock_get_profile, mock_client):
     mock_get_urs_creds.return_value = {"UrsAuth": "URS_AUTH"}
-    mock_request.urlopen.side_effect = urllib.error.URLError("test error")
+    mock_client().request.side_effect = EdlException(
+        urllib.error.URLError("test error"),
+        msg={},
+        payload=None,
+    )
 
     assert get_new_token_and_profile("user_id", "cookietoken") is None
     mock_get_profile.assert_not_called()
