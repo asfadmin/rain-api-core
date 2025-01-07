@@ -1,14 +1,11 @@
-import json
 import logging
 import os
-import urllib
-from time import time
+from typing import Optional
 
 from rain_api_core.auth import JwtManager, UserProfile
 from rain_api_core.aws_util import retrieve_secret
-from rain_api_core.general_util import duration, return_timing_object
+from rain_api_core.edl import EdlClient, EdlException
 from rain_api_core.logging import log_context
-from rain_api_core.timer import Timer
 
 log = logging.getLogger(__name__)
 
@@ -27,43 +24,28 @@ def get_redirect_url(ctxt: dict = None) -> str:
     return f'{get_base_url(ctxt)}login'
 
 
-def do_auth(code: str, redirect_url: str, aux_headers: dict = None) -> dict:
-    aux_headers = aux_headers or {}  # A safer default
-    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
-
+def do_auth(code: str, redirect_url: str, aux_headers: dict = {}) -> dict:
     # App U:P from URS Application
     auth = get_urs_creds()['UrsAuth']
 
-    post_data = {"grant_type": "authorization_code",
-                 "code": code,
-                 "redirect_uri": redirect_url}
+    data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirect_url,
+    }
 
-    headers = {"Authorization": "Basic " + auth}
+    headers = {'Authorization': 'Basic ' + auth}
     headers.update(aux_headers)
 
-    post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
-    post_request = urllib.request.Request(url, post_data_encoded, headers)
-
-    timer = Timer()
-    timer.mark("do_auth() urlopen()")
+    client = EdlClient()
     try:
-        log.debug('headers: {}'.format(headers))
-        log.debug('url: {}'.format(url))
-        log.debug('post_data: {}'.format(post_data))
-
-        response = urllib.request.urlopen(post_request)  # nosec URL is *always* URS.
-        timer.mark("do_auth() request to URS")
-        packet = response.read()
-        timer.mark()
-
-        timer.log_all(log)
-        log.info(return_timing_object(service="EDL", endpoint=url, method="POST", duration=timer.total.duration()))
-
-        return json.loads(packet)
-    except urllib.error.URLError as e:
-        log.error("Error fetching auth: %s", e)
-        timer.mark()
-        log.debug("ET for the attempt: %.4f", timer.total.duration())
+        return client.request(
+            'POST',
+            '/oauth/token',
+            data=data,
+            headers=headers,
+        )
+    except EdlException:
         return {}
 
 
@@ -108,35 +90,36 @@ def get_user_profile(urs_user_payload: dict, access_token) -> UserProfile:
     )
 
 
-def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: dict = None) -> UserProfile:
-    aux_headers = aux_headers or {}  # Safer Default
-
+def get_profile(
+    user_id: str,
+    token: str,
+    temptoken: str = None,
+    aux_headers: dict = {},
+) -> Optional[UserProfile]:
     if not user_id or not token:
         return None
 
-    # get_new_token_and_profile() will pass this function a temporary token with which to fetch the profile info. We
-    # don't want to keep it around, just use it here, once:
+    # get_new_token_and_profile() will pass this function a temporary token with
+    # which to fetch the profile info. We don't want to keep it around, just use
+    # it here, once:
     if temptoken:
         headertoken = temptoken
     else:
         headertoken = token
 
-    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/api/users/{0}".format(user_id)
-    headers = {"Authorization": "Bearer " + headertoken}
+    headers = {'Authorization': 'Bearer ' + headertoken}
     headers.update(aux_headers)
-    req = urllib.request.Request(url, None, headers)
 
+    client = EdlClient()
     try:
-        timer = time()
-        response = urllib.request.urlopen(req)  # nosec URL is *always* URS.
-        packet = response.read()
-        log.info(return_timing_object(service="EDL", endpoint=url, duration=duration(timer)))
-        user_profile = json.loads(packet)
-
+        user_profile = client.request(
+            'GET',
+            f'/api/users/{user_id}',
+            headers=headers,
+        )
         return get_user_profile(user_profile, headertoken)
-
-    except urllib.error.URLError as e:
-        log.warning("Error fetching profile: {0}".format(e))
+    except EdlException as e:
+        log.warning('Error fetching profile: %s', e.inner)
         if not temptoken:  # This keeps get_new_token_and_profile() from calling this over and over
             log.debug('because error above, going to get_new_token_and_profile()')
             return get_new_token_and_profile(user_id, token, aux_headers)
@@ -148,46 +131,39 @@ def get_profile(user_id: str, token: str, temptoken: str = None, aux_headers: di
     return None
 
 
-def get_new_token_and_profile(user_id: str, cookietoken: str, aux_headers: dict = None):
-    aux_headers = aux_headers or {}  # A safer default
-
-    # get a new token
-    url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + "/oauth/token"
-
+def get_new_token_and_profile(
+    user_id: str,
+    cookietoken: str,
+    aux_headers: dict = {},
+) -> Optional[UserProfile]:
     # App U:P from URS Application
     auth = get_urs_creds()['UrsAuth']
-    post_data = {"grant_type": "client_credentials"}
-    headers = {"Authorization": "Basic " + auth}
+    data = {'grant_type': 'client_credentials'}
+
+    headers = {'Authorization': 'Basic ' + auth}
     headers.update(aux_headers)
 
-    # Download token
-    post_data_encoded = urllib.parse.urlencode(post_data).encode("utf-8")
-    post_request = urllib.request.Request(url, post_data_encoded, headers)
-
-    timer = Timer()
-    timer.mark("get_new_token_and_profile() urlopen()")
+    client = EdlClient()
     try:
-        log.info("Attempting to get new Token")
+        log.info('Attempting to get new Token')
 
-        response = urllib.request.urlopen(post_request)  # nosec URL is *always* URS.
+        response = client.request(
+            'POST',
+            '/oauth/token',
+            data=data,
+            headers=headers,
+        )
+        new_token = response['access_token']
 
-        timer.mark("get_new_token_and_profile() response.read()")
-        packet = response.read()
-
-        timer.mark("get_new_token_and_profile() json.loads()")
-        log.info(return_timing_object(service="EDL", endpoint=url, duration=timer.total.duration()))
-        new_token = json.loads(packet)['access_token']
-        timer.mark()
-
-        log.info("Retrieved new token: {0}".format(new_token))
-        timer.log_all(log)
+        log.info('Retrieved new token: %s', new_token)
         # Get user profile with new token
-        return get_profile(user_id, cookietoken, new_token, aux_headers=aux_headers)
-
-    except urllib.error.URLError as e:
-        log.error("Error fetching auth: %s", e)
-        timer.mark()
-        log.debug("ET for the attempt: %.4f", timer.total.duration())
+        return get_profile(
+            user_id,
+            cookietoken,
+            new_token,
+            aux_headers=aux_headers,
+        )
+    except EdlException:
         return None
 
 
