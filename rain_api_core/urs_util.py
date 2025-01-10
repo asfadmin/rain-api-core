@@ -109,12 +109,14 @@ def get_profile(
 
     headers = {'Authorization': 'Bearer ' + headertoken}
     headers.update(aux_headers)
+    params = {'client_id': get_urs_creds()['UrsId']}
 
     client = EdlClient()
     try:
         user_profile = client.request(
             'GET',
             f'/api/users/{user_id}',
+            params=params,
             headers=headers,
         )
         return get_user_profile(user_profile, headertoken)
