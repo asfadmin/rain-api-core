@@ -1,19 +1,37 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Generator, Iterable, Optional, Sequence, Tuple
+from typing import (
+    Dict,
+    Generator,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 # By default, buckets are accessible to any logged in users. This is
 # represented by an empty set.
 _DEFAULT_PERMISSION_FACTORY = set
 
+AccessPermission = Union[Set[str], None, Literal[False]]
+PublicAccess = None
+NoAccess: Literal[False] = False
+
 
 def _is_accessible(
-    required_groups: Optional[set],
+    required_groups: AccessPermission,
     groups: Optional[Iterable[str]]
 ) -> bool:
     # Check for public access
-    if required_groups is None:
+    if required_groups is PublicAccess:
         return True
+
+    if required_groups is NoAccess:
+        return False
 
     # At this point public access is not allowed
     if groups is None:
@@ -28,7 +46,7 @@ class BucketMapEntry():
     bucket_path: str
     object_key: str
     headers: dict = field(default_factory=dict)
-    _access_control: Optional[dict] = None
+    _access_control: Optional[Dict[str, AccessPermission]] = None
 
     def is_accessible(self, groups: Iterable[str] = None) -> bool:
         """Check if the object is accessible with the given permissions.
@@ -41,12 +59,16 @@ class BucketMapEntry():
         required_groups = self.get_required_groups()
         return _is_accessible(required_groups, groups)
 
-    def get_required_groups(self) -> Optional[set]:
+    def get_required_groups(self) -> AccessPermission:
         """Get a set of permissions protecting this object.
 
         It is sufficient to have one of the permissions in the set in order to
-        access the object. Returns None if the object has public access. An
-        empty set means any logged in user can access the object.
+        access the object. An empty set means any logged in user can access the
+        object.
+
+        :returns: Set[str] -- Can access the object if any permission matches
+        :returns: None -- The object has public access
+        :returns: False -- The object cannot be accessed by anyone
         """
         if not self._access_control:
             return _DEFAULT_PERMISSION_FACTORY()
@@ -168,7 +190,7 @@ def _walk_entries(node: dict, path=()) -> Generator[Tuple[str, tuple, Optional[d
     """A generator to recursively yield all leaves of a bucket map"""
 
     for key, val in node.items():
-        if key in ("PUBLIC_BUCKETS", "PRIVATE_BUCKETS"):
+        if key in ("PUBLIC_BUCKETS", "PRIVATE_BUCKETS", "NOACCESS_BUCKETS"):
             continue
 
         path_parts = (*path, key)
@@ -207,12 +229,16 @@ def _parse_access_control(bucket_map: dict) -> dict:
     """
     public_buckets = bucket_map.get("PUBLIC_BUCKETS", ())
     private_buckets = bucket_map.get("PRIVATE_BUCKETS", {})
+    no_access_buckets = bucket_map.get("NOACCESS_BUCKETS", ())
 
     try:
-        access_list = [(rule, None) for rule in public_buckets]
+        access_list: List[Tuple[str, AccessPermission]] = [
+            (rule, PublicAccess) for rule in public_buckets
+        ]
     except TypeError:
         access_list = []
     access_list.extend((rule, set(groups)) for rule, groups in private_buckets.items())
+    access_list.extend((rule, NoAccess) for rule in no_access_buckets)
 
     # Relying on the fact that `sort` is stable. The order in which we add
     # public/private rules to `access_list` is therefore important.
@@ -220,10 +246,10 @@ def _parse_access_control(bucket_map: dict) -> dict:
 
     # Convert to dictionary for easier lookup on individual buckets
     # We're relying on python's dictionary keys being insertion ordered
-    access = defaultdict(dict)
-    for (rule, obj) in access_list:
+    access: Dict[str, Dict[str, AccessPermission]] = defaultdict(dict)
+    for (rule, permission) in access_list:
         bucket, *prefix = rule.split("/", 1)
-        access[bucket]["".join(prefix)] = obj
+        access[bucket]["".join(prefix)] = permission
 
     # Set default permissions. We do this after the other rules have been added
     # so that the default permission rule always comes last.
@@ -253,11 +279,13 @@ def _check_iam_compatible(access_control: dict):
                 continue
 
             parent_access = access_rules[longest_prefix]
-            if access is None:
-                # Public access is always allowed
+            if access is PublicAccess or parent_access is NoAccess:
+                # Public access is always allowed.
+                # If the parent has no access, then it is impossible for the
+                # child to be more restrictive, so any permission is allowed.
                 continue
 
-            if parent_access is not None:
+            if parent_access is not PublicAccess:
                 if not access or parent_access and parent_access <= access:
                     continue
 
@@ -285,8 +313,10 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
 
 
 def _access_text(access) -> str:
-    if access is None:
+    if access is PublicAccess:
         return "public access"
+    if access is NoAccess:
+        return "no access"
     if access == set():
         return "protected access"
 

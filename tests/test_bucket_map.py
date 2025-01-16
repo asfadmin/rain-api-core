@@ -15,19 +15,26 @@ def sample_bucket_map():
             "productX": "bucket",
             "nested": {
                 "nested2a": {
-                    "nested3": "nested-bucket-public"
+                    "nested3": "nested-bucket-public",
                 },
-                "nested2b": "nested-bucket-private"
-            }
+                "nested2b": "nested-bucket-private",
+            },
+            "COMBINED": "combined-bucket",
         },
         "PUBLIC_BUCKETS": {
             "browse-bucket": "General browse Imagery",
-            "bucket/browse": "ProductX Browse Imagery"
+            "bucket/browse": "ProductX Browse Imagery",
         },
         "PRIVATE_BUCKETS": {
             "bucket/2020/12": ["science_team"],
-            "nested-bucket-private": []
-        }
+            "nested-bucket-private": [],
+            "combined-bucket/COLLECTION_1/": ["collection_1"],
+            "combined-bucket/COLLECTION_2/": ["collection_2"],
+            "combined-bucket/COLLECTION_3/": ["collection_3"],
+        },
+        "NOACCESS_BUCKETS": {
+            "combined-bucket": "Bucket with many collections",
+        },
     }
 
 
@@ -335,6 +342,17 @@ def test_entries(sample_bucket_map):
             object_key="",
             _access_control={"": set()}
         ),
+        BucketMapEntry(
+            bucket="combined-bucket",
+            bucket_path="COMBINED",
+            object_key="",
+            _access_control={
+                "COLLECTION_1/": {"collection_1"},
+                "COLLECTION_2/": {"collection_2"},
+                "COLLECTION_3/": {"collection_3"},
+                "": False,
+            },
+        ),
     ]
 
 
@@ -376,6 +394,17 @@ def test_check_bucket_access(sample_bucket_map):
     assert b_map.get("productX/2020/12/obj1").is_accessible() is False
     assert b_map.get("nested/nested2b/obj1").is_accessible() is False
     assert b_map.get("nested/nested2b/obj1").is_accessible(groups=[]) is True
+    assert b_map.get("COMBINED/obj").is_accessible() is False
+    assert b_map.get("COMBINED/obj").is_accessible(groups=[]) is False
+    assert b_map.get("COMBINED/obj").is_accessible(
+        groups=["collection_1", "collection_2", "collection_3"],
+    ) is False
+    assert b_map.get("COMBINED/COLLECTION_1/obj").is_accessible() is False
+    assert b_map.get("COMBINED/COLLECTION_1/obj").is_accessible(groups=["collection_1"]) is True
+    assert b_map.get("COMBINED/COLLECTION_2/obj").is_accessible() is False
+    assert b_map.get("COMBINED/COLLECTION_2/obj").is_accessible(groups=["collection_2"]) is True
+    assert b_map.get("COMBINED/COLLECTION_3/obj").is_accessible() is False
+    assert b_map.get("COMBINED/COLLECTION_3/obj").is_accessible(groups=["collection_3"]) is True
 
 
 def test_check_bucket_access_conflicting():
@@ -558,6 +587,19 @@ def test_check_iam_compatible_nested_private_first():
         },
         iam_compatible=True
     )
+    _ = BucketMap(
+        {
+            "PRIVATE_BUCKETS": {
+                "bucket/group_1/": ["group_1"],
+                "bucket/group_2/": ["group_2"],
+                "bucket/group_3/": ["group_3"],
+            },
+            "NOACCESS_BUCKETS": {
+                "bucket": "Bucket",
+            },
+        },
+        iam_compatible=True,
+    )
 
 
 def test_check_iam_compatible_nested_protected_then_private():
@@ -620,6 +662,8 @@ def test_get_required_groups(sample_bucket_map):
     assert b_map.get("productX/browse/obj1").get_required_groups() is None
     assert b_map.get("productX/2020/12/obj1").get_required_groups() == {"science_team"}
     assert b_map.get("productX/2020/23/obj2").get_required_groups() == set()
+    assert b_map.get("COMBINED/obj1").get_required_groups() is False
+    assert b_map.get("COMBINED/COLLECTION_1/obj1").get_required_groups() == {"collection_1"}
 
 
 def test_to_iam_policy_empty():
@@ -834,6 +878,84 @@ def test_to_iam_policy_private_with_multiple_nested_private():
                 }
             }
         ]
+    }
+
+
+def test_to_iam_policy_noaccess_with_multiple_nested_private():
+    bucket_map = {
+        "PATH": "bucket-name",
+        "PRIVATE_BUCKETS": {
+            "bucket-name/closed1/": ["group_1"],
+            "bucket-name/closed2/": ["group_2"],
+            "bucket-name/closed3/": ["group_1", "group_2"],
+            "bucket-name/closed1/open1/": [],
+            "bucket-name/closed1/open2/": [],
+            "bucket-name/closed1/open3/": [],
+        },
+        "NOACCESS_BUCKETS": {
+            "bucket-name": "Private bucket",
+        },
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=()) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name/closed1/open1/*",
+                    "arn:aws:s3:::bucket-name/closed1/open2/*",
+                    "arn:aws:s3:::bucket-name/closed1/open3/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "closed1/open1/*",
+                            "closed1/open2/*",
+                            "closed1/open3/*",
+                        ],
+                    },
+                },
+            },
+        ],
+    }
+
+    assert b_map.to_iam_policy(groups=("group_1",)) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name/closed1/*",
+                    "arn:aws:s3:::bucket-name/closed3/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket-name",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "closed1/*",
+                            "closed3/*",
+                        ],
+                    },
+                },
+            },
+        ],
     }
 
 
