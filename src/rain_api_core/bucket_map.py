@@ -24,7 +24,7 @@ def _is_accessible(
 
 
 @dataclass()
-class BucketMapEntry():
+class BucketMapEntry:
     bucket: str
     bucket_path: str
     object_key: str
@@ -61,13 +61,13 @@ class BucketMapEntry():
         return _DEFAULT_PERMISSION_FACTORY()
 
 
-class BucketMap():
+class BucketMap:
     def __init__(
         self,
         bucket_map: dict,
         bucket_name_prefix: str = "",
         reverse: bool = False,
-        iam_compatible: bool = True
+        iam_compatible: bool = True,
     ):
         self.bucket_map = bucket_map
         self.access_control = _parse_access_control(bucket_map)
@@ -122,7 +122,7 @@ class BucketMap():
                 bucket=bucket,
                 bucket_path=bucket_path,
                 object_key=object_key,
-                headers=headers
+                headers=headers,
             )
 
         return None
@@ -133,7 +133,7 @@ class BucketMap():
                 bucket=bucket,
                 bucket_path="/".join(path_parts),
                 object_key="",
-                headers=headers
+                headers=headers,
             )
 
     def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
@@ -161,7 +161,7 @@ class BucketMap():
             # TODO(reweeden): Do we really want to control access by
             # bucket? Wouldn't it make more sense to control access by
             # path instead?
-            _access_control=self.access_control.get(bucket)
+            _access_control=self.access_control.get(bucket),
         )
 
 
@@ -222,7 +222,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     # Convert to dictionary for easier lookup on individual buckets
     # We're relying on python's dictionary keys being insertion ordered
     access = defaultdict(dict)
-    for (rule, obj) in access_list:
+    for rule, obj in access_list:
         bucket, *prefix = rule.split("/", 1)
         access[bucket]["".join(prefix)] = obj
 
@@ -275,12 +275,13 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
     # generated bucketmap that makes heavy use of prefix permissions
     longest_prefix, _ = max(
         (
+            # ruff hint
             (k, len(k))
             for k in prefixes
             if key.startswith(k) and key != k
         ),
         key=lambda x: x[1],
-        default=(None, 0)
+        default=(None, 0),
     )
     return longest_prefix
 
@@ -304,6 +305,7 @@ class IamPolicyGenerator:
     def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
         # Dedupe across buckets
         bucket_access = {
+            # ruff hint
             entry.bucket: entry._access_control
             for entry in entries
         }
@@ -320,7 +322,9 @@ class IamPolicyGenerator:
                     get_object_statement.add_action("s3:ListBucket")
                     get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
 
-                get_object_statement.add_resource(f"arn:aws:s3:::{bucket}/{key_prefix}*")
+                get_object_statement.add_resource(
+                    f"arn:aws:s3:::{bucket}/{key_prefix}*",
+                )
 
         if not get_object_statement.resource:
             return None
@@ -341,13 +345,13 @@ class IamPolicyGenerator:
                         resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
                         condition={
                             "StringLike": {
-                                "s3:prefix": [f"{prefix}*" for prefix in prefixes]
-                            }
-                        }
+                                "s3:prefix": [f"{prefix}*" for prefix in prefixes],
+                            },
+                        },
                     ).to_dict()
                     for buckets, prefixes in list_bucket_conditions.items()
-                )
-            ]
+                ),
+            ],
         }
 
     def _consolidate_access_rules(self, access_control: Optional[dict]) -> dict:
@@ -395,8 +399,8 @@ class _IamStatement:
     ):
         self.effect = effect
         # Using dict instead of set because sets are unordered.
-        self.action = dict((val, None) for val in action)
-        self.resource = dict((val, None) for val in resource)
+        self.action = {val: None for val in action}
+        self.resource = {val: None for val in resource}
         self.condition = condition
 
     def add_action(self, value: str):
@@ -416,7 +420,7 @@ class _IamStatement:
         statement = {
             "Effect": self.effect,
             "Action": list(self.action),
-            "Resource": list(self.resource)
+            "Resource": list(self.resource),
         }
         if self.condition is not None:
             statement["Condition"] = self.condition

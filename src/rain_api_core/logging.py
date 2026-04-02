@@ -10,48 +10,50 @@ LOG_CENSOR = [
     {
         "regex": r"(eyJ[A-Za-z0-9-_]{12})[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*\.[A-Za-z0-9-_]*([A-Za-z0-9-_]{10})",
         "replace": "\\g<1>XXX<JWTTOKEN>XXX\\g<2>",
-        "description": "X-out JWT Token payload"
+        "description": "X-out JWT Token payload",
     },
     {
         "regex": r"(EDL-[A-Za-z0-9]+)[A-Za-z0-9]{40}([A-Za-z0-9]{10})",
         "replace": "\\g<1>XXX<EDLTOKEN>XXX\\g<2>",
-        "description": "X-out non-JWT EDL token"
+        "description": "X-out non-JWT EDL token",
     },
     {
         "regex": r"(Basic )[A-Za-z0-9+/=]{4,}",
         "replace": "\\g<1>XXX<BASICAUTH>XXX",
-        "description": "X-out Basic Auth Credentials"
+        "description": "X-out Basic Auth Credentials",
     },
     {
         "regex": r"([^A-Za-z0-9/+=][A-Za-z0-9/+=]{5})[A-Za-z0-9/+=]{30}([A-Za-z0-9/+=]{5}[^A-Za-z0-9/+=])",
         "replace": "\\g<1>XXX<AWSSECRET>XXX\\g<2>",
-        "description": "X-out AWS Secret"
-    }
+        "description": "X-out AWS Secret",
+    },
 ]
 
 
 def get_log():
-    loglevel = os.getenv('LOGLEVEL', 'INFO')
-    logtype = os.getenv('LOGTYPE', 'json')
-    if logtype == 'flat':
+    loglevel = os.getenv("LOGLEVEL", "INFO")
+    logtype = os.getenv("LOGTYPE", "json")
+    if logtype == "flat":
         formatter = LogCensorFormatter(
             "%(levelname)s: %(message)s (%(filename)s line %(lineno)d/%(build_vers)s/%(maturity)s) - "
             "RequestId: %(request_id)s; OriginRequestId: %(origin_request_id)s; user_id: %(user_id)s; route: %(route)s"
         )
     else:
-        formatter = JSONFormatter({
-            "level": "%(levelname)s",
-            "RequestId": "%(request_id)s",
-            "OriginRequestId": "%(origin_request_id)s",
-            "message": "%(message)s",
-            "maturity": "%(maturity)s",
-            "user_id": "%(user_id)s",
-            "route": "%(route)s",
-            "build": "%(build_vers)s",
-            "filename": "%(filename)s",
-            "lineno": "%(lineno)s",
-            "exception": "%(exc_obj)s"
-        })
+        formatter = JSONFormatter(
+            {
+                "level": "%(levelname)s",
+                "RequestId": "%(request_id)s",
+                "OriginRequestId": "%(origin_request_id)s",
+                "message": "%(message)s",
+                "maturity": "%(maturity)s",
+                "user_id": "%(user_id)s",
+                "route": "%(route)s",
+                "build": "%(build_vers)s",
+                "filename": "%(filename)s",
+                "lineno": "%(lineno)s",
+                "exception": "%(exc_obj)s",
+            }
+        )
 
     logger = logging.getLogger()
 
@@ -65,19 +67,19 @@ def get_log():
     logger.addHandler(handler)
     logger.setLevel(loglevel)
 
-    if os.getenv("QUIETBOTO", 'TRUE').upper() == 'TRUE':
+    if os.getenv("QUIETBOTO", "TRUE").upper() == "TRUE":
         # BOTO, be quiet plz
-        logging.getLogger('boto3').setLevel(logging.ERROR)
-        logging.getLogger('botocore').setLevel(logging.ERROR)
-        logging.getLogger('nose').setLevel(logging.ERROR)
-        logging.getLogger('elasticsearch').setLevel(logging.ERROR)
-        logging.getLogger('s3transfer').setLevel(logging.ERROR)
-        logging.getLogger('urllib3').setLevel(logging.ERROR)
-        logging.getLogger('connectionpool').setLevel(logging.ERROR)
+        logging.getLogger("boto3").setLevel(logging.ERROR)
+        logging.getLogger("botocore").setLevel(logging.ERROR)
+        logging.getLogger("nose").setLevel(logging.ERROR)
+        logging.getLogger("elasticsearch").setLevel(logging.ERROR)
+        logging.getLogger("s3transfer").setLevel(logging.ERROR)
+        logging.getLogger("urllib3").setLevel(logging.ERROR)
+        logging.getLogger("connectionpool").setLevel(logging.ERROR)
     return logger
 
 
-class PercentPlaceholder():
+class PercentPlaceholder:
     """A placeholder in a log format object
 
     The placeholder can be formatted with the % operator.
@@ -87,7 +89,7 @@ class PercentPlaceholder():
     'hello'
     """
 
-    __slots__ = ("name", )
+    __slots__ = ("name",)
 
     def __init__(self, name: str):
         self.name = name
@@ -97,7 +99,7 @@ class PercentPlaceholder():
             return args[self.name]
 
 
-class JSONPercentStyle():
+class JSONPercentStyle:
     """Format log records into a JSON object (dict, list) using percent formatting
 
     The `fmt` dict will be searched for percent formatting strings. When a value in
@@ -120,7 +122,9 @@ class JSONPercentStyle():
 
     default_format = {"message": "%(message)s"}
     placeholder_pattern = re.compile(r"^%\((\w+)\)s$")
-    validation_pattern = re.compile(r'%\(\w+\)[#0+ -]*(\*|\d+)?(\.(\*|\d+))?[diouxefgcrsa%]', re.I)
+    validation_pattern = re.compile(
+        r"%\(\w+\)[#0+ -]*(\*|\d+)?(\.(\*|\d+))?[diouxefgcrsa%]", re.I
+    )
 
     def __init__(self, fmt: dict):
         self._fmt = self._convert_placeholders(fmt or self.default_format)
@@ -129,6 +133,7 @@ class JSONPercentStyle():
 
     def _convert_placeholders(self, obj):
         """Convert '%(name)s' values into PercentPlaceholder objects"""
+
         def func(obj):
             if isinstance(obj, str):
                 m = self.placeholder_pattern.match(obj)
@@ -185,10 +190,16 @@ class JSONFormatter(logging.Formatter):
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
 
-        record.exc_obj = self.formatException(record.exc_info).split("\n") if record.exc_info else None
+        record.exc_obj = (
+            self.formatException(record.exc_info).split("\n")
+            if record.exc_info
+            else None
+        )
 
         obj = self.formatMessage(record)
-        assert not any(isinstance(val, PercentPlaceholder) for val in _iter_json_values(obj))
+        assert not any(
+            isinstance(val, PercentPlaceholder) for val in _iter_json_values(obj)
+        )
 
         return filter_log_credentials(json.dumps(obj, default=str))
 
@@ -204,7 +215,7 @@ class TaggingFilter(logging.Filter):
             "request_id": None,
             "origin_request_id": None,
             "user_id": None,
-            "route": None
+            "route": None,
         }
 
     def filter(self, record: logging.LogRecord):
@@ -235,6 +246,7 @@ def filter_log_credentials(msg: str):
 
 
 # Helpers for traversing json like structures of nested dict/lists
+
 
 def _fmt_json_val(val, args):
     if isinstance(val, (str, PercentPlaceholder)) and args:

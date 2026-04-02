@@ -6,7 +6,7 @@ from typing import Optional
 
 
 @dataclass(eq=False)
-class Interval():
+class Interval:
     start: Optional[float] = None
     end: Optional[float] = None
 
@@ -17,7 +17,7 @@ class Interval():
         return self.end - self.start
 
 
-class Timer():
+class Timer:
     """A helper for recording the times of a sequence of events.
 
     This object is not thread safe.

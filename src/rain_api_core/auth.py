@@ -26,26 +26,26 @@ class UserProfile:
     @classmethod
     def from_jwt_payload(cls, payload):
         return cls(
-            user_id=payload.get('urs-user-id'),
-            token=payload.get('urs-access-token'),
-            groups=payload.get('urs-groups'),
-            first_name=payload.get('first_name'),
-            last_name=payload.get('last_name'),
-            email=payload.get('email'),
-            iat=payload.get('iat'),
-            exp=payload.get('exp')
+            user_id=payload.get("urs-user-id"),
+            token=payload.get("urs-access-token"),
+            groups=payload.get("urs-groups"),
+            first_name=payload.get("first_name"),
+            last_name=payload.get("last_name"),
+            email=payload.get("email"),
+            iat=payload.get("iat"),
+            exp=payload.get("exp"),
         )
 
     def to_jwt_payload(self):
         return {
-            'urs-user-id': self.user_id,
-            'urs-access-token': self.token,
-            'urs-groups': self.groups,
-            'first_name': self.first_name,
-            'last_name': self.last_name,
-            'email': self.email,
-            'iat': self.iat,
-            'exp': self.exp,
+            "urs-user-id": self.user_id,
+            "urs-access-token": self.token,
+            "urs-groups": self.groups,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "email": self.email,
+            "iat": self.iat,
+            "exp": self.exp,
         }
 
 
@@ -57,7 +57,7 @@ class JwtManager:
         private_key: str,
         cookie_name: str,
         blacklist={},
-        session_ttl_in_hours: float = 7 * 24
+        session_ttl_in_hours: float = 7 * 24,
     ):
         self.algorithm = algorithm
         self.public_key = public_key
@@ -67,7 +67,9 @@ class JwtManager:
         self.black_list = blacklist
 
     def _get_auth_cookie(self, headers: Mapping[str, str]):
-        cookie_string = headers.get('cookie') or headers.get('Cookie') or headers.get('COOKIE')
+        cookie_string = (
+            headers.get("cookie") or headers.get("Cookie") or headers.get("COOKIE")
+        )
         if not cookie_string:
             return {}
 
@@ -80,17 +82,17 @@ class JwtManager:
         try:
             return jwt.decode(token.encode(), self.public_key, [self.algorithm])
         except jwt.ExpiredSignatureError:
-            log.info('JWT has expired')
+            log.info("JWT has expired")
         except jwt.InvalidSignatureError:
-            log.info('JWT has failed verification')
+            log.info("JWT has failed verification")
         return None
 
     def _encode_jwt(self, payload: Mapping[str, str]) -> str:
         try:
             encoded = jwt.encode(payload, self.private_key, self.algorithm)
         except TypeError:
-            log.error('unable to encode jwt cookie')
-            return ''
+            log.error("unable to encode jwt cookie")
+            return ""
         return encoded
 
     def _jwt_payload_from_user_profile(self, user_profile: Optional[UserProfile]):
@@ -98,14 +100,14 @@ class JwtManager:
             return {}
         now = int(time())
         return {
-            'urs-user-id': user_profile.user_id,
-            'first_name': user_profile.first_name,
-            'last_name': user_profile.last_name,
-            'email': user_profile.email,
-            'urs-access-token': user_profile.token,
-            'urs-groups': user_profile.groups,
-            'iat': now,
-            'exp': now + self.session_ttl
+            "urs-user-id": user_profile.user_id,
+            "first_name": user_profile.first_name,
+            "last_name": user_profile.last_name,
+            "email": user_profile.email,
+            "urs-access-token": user_profile.token,
+            "urs-groups": user_profile.groups,
+            "iat": now,
+            "exp": now + self.session_ttl,
         }
 
     def _in_blacklist(self, user_profile: UserProfile):
@@ -117,7 +119,8 @@ class JwtManager:
         return False
 
     def get_profile_from_headers(
-        self, headers: Mapping[str, str],
+        self,
+        headers: Mapping[str, str],
     ) -> Optional[UserProfile]:
         """Inspects headers for auth cookie and return user_profile if authenticated, None otherwise"""
         auth_cookie = self._get_auth_cookie(headers)
@@ -133,22 +136,26 @@ class JwtManager:
             return None
         return user_profile
 
-    def get_header_to_set_auth_cookie(self, user_profile: Optional[UserProfile], cookie_domain: str = ''):
-        """ Gets a header to set auth-cookie
+    def get_header_to_set_auth_cookie(
+        self,
+        user_profile: Optional[UserProfile],
+        cookie_domain: str = "",
+    ):
+        """Gets a header to set auth-cookie
 
         Parameters:
         UserProfile: UserProfile to use in construction of a cookie, if none will return header to unset/logout
         """
         payload = self._jwt_payload_from_user_profile(user_profile)
-        cookie_value = self._encode_jwt(payload) if payload else 'expired'
-        cookie_domain = f'; Domain={cookie_domain}' if cookie_domain else ''
+        cookie_value = self._encode_jwt(payload) if payload else "expired"
+        cookie_domain = f"; Domain={cookie_domain}" if cookie_domain else ""
         if payload:
-            expire_date = format_7231_date(payload['exp'])
+            expire_date = format_7231_date(payload["exp"])
         else:
-            expire_date = 'Thu, 01 Jan 1970 00:00:00 GMT'
+            expire_date = "Thu, 01 Jan 1970 00:00:00 GMT"
         return {
-            'SET-COOKIE': (
-                f'{self.cookie_name}={cookie_value}; Expires={expire_date}; Path=/{cookie_domain}; Secure; '
-                'HttpOnly; SameSite=Lax'
+            "SET-COOKIE": (
+                f"{self.cookie_name}={cookie_value}; Expires={expire_date}; Path=/{cookie_domain}; Secure; "
+                "HttpOnly; SameSite=Lax"
             )
         }

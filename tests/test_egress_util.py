@@ -29,10 +29,17 @@ def test_get_presigned_url(mock_datetime):
         "Credentials": {
             "AccessKeyId": "access_key_id",
             "SecretAccessKey": "secret_access_key",
-            "SessionToken": "session_token"
+            "SessionToken": "session_token",
         }
     }
-    presigned_url = get_presigned_url(session, "bucket_name", "object_name", "region_name", 1000, "user_id")
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "object_name",
+        "region_name",
+        1000,
+        "user_id",
+    )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/object_name"
         "?A-userid=user_id"
@@ -53,10 +60,17 @@ def test_get_presigned_url_with_spaces(mock_datetime):
         "Credentials": {
             "AccessKeyId": "access_key_id",
             "SecretAccessKey": "secret_access_key",
-            "SessionToken": "session_token"
+            "SessionToken": "session_token",
         }
     }
-    presigned_url = get_presigned_url(session, "bucket_name", "has spaces ", "region_name", 1000, "user_id")
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "has spaces ",
+        "region_name",
+        1000,
+        "user_id",
+    )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/has%20spaces%20"
         "?A-userid=user_id"
@@ -77,10 +91,17 @@ def test_get_presigned_url_with_colons(mock_datetime):
         "Credentials": {
             "AccessKeyId": "access_key_id",
             "SecretAccessKey": "secret_access_key",
-            "SessionToken": "session_token"
+            "SessionToken": "session_token",
         }
     }
-    presigned_url = get_presigned_url(session, "bucket_name", "has_:colons:", "region_name", 1000, "user_id")
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "has_:colons:",
+        "region_name",
+        1000,
+        "user_id",
+    )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/has_%3Acolons%3A"
         "?A-userid=user_id"
@@ -101,10 +122,17 @@ def test_get_presigned_url_with_newlines(mock_datetime):
         "Credentials": {
             "AccessKeyId": "access_key_id",
             "SecretAccessKey": "secret_access_key",
-            "SessionToken": "session_token"
+            "SessionToken": "session_token",
         }
     }
-    presigned_url = get_presigned_url(session, "bucket_name", "has\nnewlines\n", "region_name", 1000, "user_id")
+    presigned_url = get_presigned_url(
+        session,
+        "bucket_name",
+        "has\nnewlines\n",
+        "region_name",
+        1000,
+        "user_id",
+    )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/has%0Anewlines%0A"
         "?A-userid=user_id"
@@ -125,7 +153,7 @@ def test_get_presigned_url_with_api_request_uuid(mock_datetime):
         "Credentials": {
             "AccessKeyId": "access_key_id",
             "SecretAccessKey": "secret_access_key",
-            "SessionToken": "session_token"
+            "SessionToken": "session_token",
         }
     }
     presigned_url = get_presigned_url(
@@ -135,7 +163,7 @@ def test_get_presigned_url_with_api_request_uuid(mock_datetime):
         "region_name",
         500,
         "user_id",
-        api_request_uuid="uuid_value"
+        api_request_uuid="uuid_value",
     )
     assert presigned_url == (
         "https://bucket_name.s3.region_name.amazonaws.com/object_name"
