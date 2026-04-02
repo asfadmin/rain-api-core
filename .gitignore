@@ -1,6 +1,7 @@
 # Python
 *.pyc
 .venv
+uv.lock
 
 # IDE
 .idea
@@ -11,3 +12,6 @@
 # Tests
 .hypothesis
 .coverage
+
+# Other
+build

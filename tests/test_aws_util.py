@@ -153,6 +153,7 @@ def test_get_role_creds(monkeypatch):
         "PackedPolicySize": 6,
         "ResponseMetadata": {
             "HTTPHeaders": {
+                "content-type": "text/xml",
                 "date": mock.ANY,
                 "server": "amazon.com",
                 "x-amzn-requestid": mock.ANY,
