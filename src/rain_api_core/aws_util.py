@@ -4,6 +4,7 @@ import logging
 import os
 import urllib.request
 from time import time
+from typing import Optional
 
 from boto3 import Session as boto_Session
 from boto3 import client as botoclient
@@ -102,7 +103,7 @@ def get_s3_resource() -> boto_Session.resource:
     return s3_resource
 
 
-def read_s3(bucket: str, key: str, s3: ServiceResource = None) -> str:
+def read_s3(bucket: str, key: str, s3: Optional[ServiceResource] = None) -> str:
     """
     returns file
     :type bucket: str
@@ -155,7 +156,7 @@ def get_yaml_file(bucket: str, key: str) -> dict:
     return get_yaml(bucket, key)
 
 
-def get_role_creds(user_id: str = None, in_region: bool = False):
+def get_role_creds(user_id: Optional[str] = None, in_region: bool = False):
     """
     :param user_id: string with URS username
     :param in_region: boolean If True a download role that works only in region will be returned
@@ -205,7 +206,10 @@ def get_role_creds(user_id: str = None, in_region: bool = False):
     return role_creds_cache[download_role_arn][user_id]["session"], session_offset
 
 
-def get_role_session(creds: dict = None, user_id: str = None) -> boto_Session:
+def get_role_session(
+    creds: Optional[dict] = None,
+    user_id: Optional[str] = None,
+) -> boto_Session:
     global session_cache  # pylint: disable=global-statement
     sts_resp = creds if creds else get_role_creds(user_id)[0]
     log.debug('sts_resp: {0}'.format(sts_resp))

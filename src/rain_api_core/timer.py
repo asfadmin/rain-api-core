@@ -1,7 +1,8 @@
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 
 @dataclass(eq=False)
@@ -28,7 +29,7 @@ class Timer():
         self.last_name: Optional[str] = None
         self.total = Interval()
 
-    def mark(self, name: str = None) -> float:
+    def mark(self, name: Optional[str] = None) -> float:
         """Record a new event.
 
         If called without `name`, any previously started event will be marked

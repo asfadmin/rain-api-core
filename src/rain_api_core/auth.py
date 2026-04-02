@@ -1,9 +1,10 @@
 import contextlib
 import dataclasses
 import logging
+from collections.abc import Mapping
 from http.cookies import CookieError, SimpleCookie
 from time import time
-from typing import List, Mapping, Optional
+from typing import Optional
 from wsgiref.handlers import format_date_time as format_7231_date
 
 import jwt
@@ -15,12 +16,12 @@ log = logging.getLogger(__name__)
 class UserProfile:
     user_id: str
     token: str
-    groups: List[str]
+    groups: list[str]
     first_name: str
     last_name: str
     email: str
-    iat: int = None
-    exp: int = None
+    iat: Optional[int] = None
+    exp: Optional[int] = None
 
     @classmethod
     def from_jwt_payload(cls, payload):
@@ -115,7 +116,9 @@ class JwtManager:
                 return True
         return False
 
-    def get_profile_from_headers(self, headers) -> Optional[UserProfile]:
+    def get_profile_from_headers(
+        self, headers: Mapping[str, str],
+    ) -> Optional[UserProfile]:
         """Inspects headers for auth cookie and return user_profile if authenticated, None otherwise"""
         auth_cookie = self._get_auth_cookie(headers)
         if not auth_cookie:
@@ -130,7 +133,7 @@ class JwtManager:
             return None
         return user_profile
 
-    def get_header_to_set_auth_cookie(self, user_profile: Optional[UserProfile], cookie_domain=''):
+    def get_header_to_set_auth_cookie(self, user_profile: Optional[UserProfile], cookie_domain: str = ''):
         """ Gets a header to set auth-cookie
 
         Parameters:

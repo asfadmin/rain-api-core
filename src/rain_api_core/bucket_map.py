@@ -1,6 +1,7 @@
 from collections import defaultdict
+from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Generator, Iterable, Optional, Sequence, Tuple
+from typing import Optional
 
 # By default, buckets are accessible to any logged in users. This is
 # represented by an empty set.
@@ -8,8 +9,8 @@ _DEFAULT_PERMISSION_FACTORY = set
 
 
 def _is_accessible(
-    required_groups: Optional[set],
-    groups: Optional[Iterable[str]]
+    required_groups: Optional[set[str]],
+    groups: Optional[Iterable[str]],
 ) -> bool:
     # Check for public access
     if required_groups is None:
@@ -30,7 +31,7 @@ class BucketMapEntry():
     headers: dict = field(default_factory=dict)
     _access_control: Optional[dict] = None
 
-    def is_accessible(self, groups: Iterable[str] = None) -> bool:
+    def is_accessible(self, groups: Optional[Iterable[str]] = None) -> bool:
         """Check if the object is accessible with the given permissions.
 
         Setting `groups` to an iterable implies that the user has logged in,
@@ -41,7 +42,7 @@ class BucketMapEntry():
         required_groups = self.get_required_groups()
         return _is_accessible(required_groups, groups)
 
-    def get_required_groups(self) -> Optional[set]:
+    def get_required_groups(self) -> Optional[set[str]]:
         """Get a set of permissions protecting this object.
 
         It is sufficient to have one of the permissions in the set in order to
@@ -126,7 +127,7 @@ class BucketMap():
 
         return None
 
-    def entries(self):
+    def entries(self) -> Generator[BucketMapEntry]:
         for bucket, path_parts, headers in _walk_entries(self._get_map()):
             yield self._make_entry(
                 bucket=bucket,
@@ -135,7 +136,7 @@ class BucketMap():
                 headers=headers
             )
 
-    def to_iam_policy(self, groups: Iterable[str] = None) -> dict:
+    def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
         generator = IamPolicyGenerator(groups)
@@ -150,8 +151,8 @@ class BucketMap():
         bucket: str,
         bucket_path: str,
         object_key: str,
-        headers: Optional[dict] = None
-    ):
+        headers: Optional[dict] = None,
+    ) -> BucketMapEntry:
         return BucketMapEntry(
             bucket=self.bucket_name_prefix + bucket,
             bucket_path=bucket_path,
@@ -164,7 +165,7 @@ class BucketMap():
         )
 
 
-def _walk_entries(node: dict, path=()) -> Generator[Tuple[str, tuple, Optional[dict]], None, None]:
+def _walk_entries(node: dict, path=()) -> Generator[tuple[str, tuple, Optional[dict]]]:
     """A generator to recursively yield all leaves of a bucket map"""
 
     for key, val in node.items():
@@ -294,7 +295,7 @@ def _access_text(access) -> str:
 
 
 class IamPolicyGenerator:
-    def __init__(self, groups: Iterable[str]):
+    def __init__(self, groups: Optional[Iterable[str]]):
         self.groups = groups
 
     def _is_accessible(self, required_groups: Optional[set]) -> bool:

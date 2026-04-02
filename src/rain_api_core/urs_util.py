@@ -10,7 +10,7 @@ from rain_api_core.logging import log_context
 log = logging.getLogger(__name__)
 
 
-def get_base_url(ctxt: dict = None) -> str:
+def get_base_url(ctxt: Optional[dict] = None) -> str:
     # Make a redirect url using optional custom domain_name, otherwise use raw domain/stage provided by API Gateway.
     try:
         domain = os.getenv('DOMAIN_NAME') or f"{ctxt['domainName']}/{ctxt['stage']}"
@@ -20,7 +20,7 @@ def get_base_url(ctxt: dict = None) -> str:
         raise
 
 
-def get_redirect_url(ctxt: dict = None) -> str:
+def get_redirect_url(ctxt: Optional[dict] = None) -> str:
     return f'{get_base_url(ctxt)}login'
 
 
@@ -49,7 +49,7 @@ def do_auth(code: str, redirect_url: str, aux_headers: dict = {}) -> dict:
         return {}
 
 
-def get_urs_url(ctxt: dict, to: str = None) -> str:
+def get_urs_url(ctxt: dict, to: Optional[str] = None) -> str:
     base_url = os.getenv('AUTH_BASE_URL', 'https://urs.earthdata.nasa.gov') + '/oauth/authorize'
 
     # From URS Application
@@ -93,7 +93,7 @@ def get_user_profile(urs_user_payload: dict, access_token) -> UserProfile:
 def get_profile(
     user_id: str,
     token: str,
-    temptoken: str = None,
+    temptoken: Optional[str] = None,
     aux_headers: dict = {},
 ) -> Optional[UserProfile]:
     if not user_id or not token:
