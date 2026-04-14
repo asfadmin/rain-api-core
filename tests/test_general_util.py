@@ -12,7 +12,7 @@ def test_return_timing_object():
             "endpoint": "Unknown",
             "method": "GET",
             "duration": 0,
-            "unit": "milliseconds"
+            "unit": "milliseconds",
         }
     }
     assert return_timing_object(Service="some_service", OTHER_KEY="OTHER_VALUE") == {
@@ -22,7 +22,7 @@ def test_return_timing_object():
             "method": "GET",
             "duration": 0,
             "unit": "milliseconds",
-            "other_key": "OTHER_VALUE"
+            "other_key": "OTHER_VALUE",
         }
     }
 

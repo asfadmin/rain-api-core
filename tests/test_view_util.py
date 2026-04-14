@@ -42,28 +42,32 @@ def template_dir(data, mocker):
     return path
 
 
-cookie_key_characters = st.sampled_from(string.ascii_letters + string.digits + "!#%&'*+-.^_`|~")
-cookie_value_characters = st.sampled_from(string.ascii_letters + string.digits + "!#$%&'()*+-./:<=>?@[]^_`{|}~")
+cookie_key_characters = st.sampled_from(
+    string.ascii_letters + string.digits + "!#%&'*+-.^_`|~"
+)
+cookie_value_characters = st.sampled_from(
+    string.ascii_letters + string.digits + "!#$%&'()*+-./:<=>?@[]^_`{|}~"
+)
 
 
 @mock.patch(f"{MODULE}.retrieve_secret", autospec=True)
 def test_get_jwt_keys(mock_retrieve_secret):
     mock_retrieve_secret.return_value = {
         "foo": "YmFy",
-        "baz": "cXV4"
+        "baz": "cXV4",
     }
     get_jwt_keys.cache_clear()
 
     assert get_jwt_keys() == {
         "foo": b"bar",
-        "baz": b"qux"
+        "baz": b"qux",
     }
 
 
 @mock.patch(f"{MODULE}.retrieve_secret", autospec=True)
 def test_get_jwt_keys_error(mock_retrieve_secret):
     mock_retrieve_secret.return_value = {
-        "foo": "bar"
+        "foo": "bar",
     }
     get_jwt_keys.cache_clear()
 
@@ -196,7 +200,7 @@ def test_get_cookie_expiration_date_str(mock_time):
 
 @given(
     name=st.text(cookie_key_characters, min_size=1),
-    value=st.text(cookie_value_characters)
+    value=st.text(cookie_value_characters),
 )
 def test_get_cookies_valid(name, value):
     cookie = SimpleCookie()
@@ -270,11 +274,13 @@ def test_decode_jwt_payload_expired_token(mock_get_jwt_keys, jwt_pub_key, jwt_pr
 def test_decode_jwt_payload_invalid_signature(mock_get_jwt_keys, jwt_pub_key):
     mock_get_jwt_keys.return_value = {"rsa_pub_key": jwt_pub_key}
 
-    encoded = b".".join((
-        jwt.utils.base64url_encode(b'{"alg": "RS256"}'),
-        jwt.utils.base64url_encode(b'{"not valid'),
-        jwt.utils.base64url_encode(b"some bytes"),
-    ))
+    encoded = b".".join(
+        (
+            jwt.utils.base64url_encode(b'{"alg": "RS256"}'),
+            jwt.utils.base64url_encode(b'{"not valid'),
+            jwt.utils.base64url_encode(b"some bytes"),
+        )
+    )
     assert decode_jwt_payload(encoded) == {}
 
 
@@ -298,7 +304,7 @@ def test_decode_jwt_payload_blacklist(
     mock_is_jwt_blacklisted,
     jwt_pub_key,
     jwt_priv_key,
-    monkeypatch
+    monkeypatch,
 ):
     mock_get_jwt_keys.return_value = {"rsa_pub_key": jwt_pub_key}
     mock_is_jwt_blacklisted.return_value = True
@@ -314,7 +320,10 @@ def test_decode_jwt_payload_blacklist(
 
 @mock.patch(f"{MODULE}.make_jwt_payload", autospec=True)
 @mock.patch(f"{MODULE}.get_cookie_expiration_date_str", autospec=True)
-def test_make_set_cookie_headers_jwt(mock_get_cookie_expiration_date_str, mock_make_jwt_payload):
+def test_make_set_cookie_headers_jwt(
+    mock_get_cookie_expiration_date_str,
+    mock_make_jwt_payload,
+):
     mock_get_cookie_expiration_date_str.return_value = "THE_EXPDATE"
     mock_make_jwt_payload.return_value = "THE_JWT_PAYLOAD"
 
@@ -324,7 +333,9 @@ def test_make_set_cookie_headers_jwt(mock_get_cookie_expiration_date_str, mock_m
     assert make_set_cookie_headers_jwt("", expdate="EXPLICIT_EXPDATE") == {
         "SET-COOKIE": "asf-urs=THE_JWT_PAYLOAD; Expires=EXPLICIT_EXPDATE; Path=/"
     }
-    assert make_set_cookie_headers_jwt("", expdate="EXPLICIT_EXPDATE", cookie_domain="THE_DOMAIN") == {
+    assert make_set_cookie_headers_jwt(
+        "", expdate="EXPLICIT_EXPDATE", cookie_domain="THE_DOMAIN"
+    ) == {
         "SET-COOKIE": "asf-urs=THE_JWT_PAYLOAD; Expires=EXPLICIT_EXPDATE; Path=/; Domain=THE_DOMAIN"
     }
 
@@ -332,12 +343,14 @@ def test_make_set_cookie_headers_jwt(mock_get_cookie_expiration_date_str, mock_m
 @mock.patch(f"{MODULE}.set_jwt_blacklist", autospec=True)
 @mock.patch(f"{MODULE}.JWT_BLACKLIST", new_callable=dict)
 def test_is_jwt_blacklisted(jwt_blacklist, mock_set_jwt_blacklist):
-    jwt_blacklist.update({
-        "blacklist": {
-            "user_id": 1000
-        },
-        "timestamp": 0
-    })
+    jwt_blacklist.update(
+        {
+            "blacklist": {
+                "user_id": 1000,
+            },
+            "timestamp": 0,
+        }
+    )
 
     assert is_jwt_blacklisted({"urs-user-id": "user_id", "iat": 10}) is True
     mock_set_jwt_blacklist.assert_called_once()
@@ -368,7 +381,7 @@ def test_set_jwt_blacklist(jwt_blacklist, mock_request, mock_time, monkeypatch):
 
     assert JWT_BLACKLIST == {
         "blacklist": {"foo": "bar"},
-        "timestamp": 0
+        "timestamp": 0,
     }
     # The object itself is not touched, only the reference that JWT_BLACKLIST points to is changed
     assert jwt_blacklist == {}
@@ -391,7 +404,7 @@ def test_set_jwt_blacklist_cached(jwt_blacklist, mock_request, mock_time, monkey
     assert mock_request.urlopen.call_count == 2
     assert JWT_BLACKLIST == {
         "blacklist": {"foo": "bar"},
-        "timestamp": 0
+        "timestamp": 0,
     }
     # The object itself is not touched, only the reference that JWT_BLACKLIST points to is changed
     assert jwt_blacklist == {}
@@ -403,7 +416,7 @@ def test_set_jwt_blacklist_cached(jwt_blacklist, mock_request, mock_time, monkey
     assert mock_request.urlopen.call_count == 2
     assert JWT_BLACKLIST == {
         "blacklist": {"foo": "bar"},
-        "timestamp": 0
+        "timestamp": 0,
     }
 
     # Third call, after some time has passed the data is re-fetched
@@ -417,5 +430,5 @@ def test_set_jwt_blacklist_cached(jwt_blacklist, mock_request, mock_time, monkey
     # Variable updated
     assert JWT_BLACKLIST == {
         "blacklist": {"baz": "qux"},
-        "timestamp": 1000
+        "timestamp": 1000,
     }

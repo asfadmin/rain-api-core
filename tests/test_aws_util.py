@@ -142,17 +142,18 @@ def test_get_role_creds(monkeypatch):
     assert session == {
         "AssumedRoleUser": {
             "Arn": mock.ANY,
-            "AssumedRoleId": mock.ANY
+            "AssumedRoleId": mock.ANY,
         },
         "Credentials": {
             "AccessKeyId": mock.ANY,
             "Expiration": mock.ANY,
             "SecretAccessKey": mock.ANY,
-            "SessionToken": mock.ANY
+            "SessionToken": mock.ANY,
         },
         "PackedPolicySize": 6,
         "ResponseMetadata": {
             "HTTPHeaders": {
+                "content-type": "text/xml",
                 "date": mock.ANY,
                 "server": "amazon.com",
                 "x-amzn-requestid": mock.ANY,
@@ -210,14 +211,18 @@ def test_get_region_cidr_ranges(mock_request, data):
         IPNetwork("13.34.43.192/27"),
         IPNetwork("15.181.232.0/21"),
         IPNetwork("52.93.127.163/32"),
-        IPNetwork("3.2.0.0/24")
+        IPNetwork("3.2.0.0/24"),
     ]
 
 
 @mock.patch(f"{MODULE}.urllib.request", autospec=True)
 @mock.patch(f"{MODULE}.region_list_cache", [])
 def test_get_region_cidr_ranges_cached(mock_request):
-    mock_request.urlopen("").read.return_value = b'{"prefixes": [{"ip_prefix": "10.0.0.1/24", "region": "us-east-1"}]}'
+    mock_request.urlopen(
+        ""
+    ).read.return_value = (
+        b'{"prefixes": [{"ip_prefix": "10.0.0.1/24", "region": "us-east-1"}]}'
+    )
 
     get_region_cidr_ranges()
     assert mock_request.urlopen.call_count == 2
@@ -228,15 +233,17 @@ def test_get_region_cidr_ranges_cached(mock_request):
 @mock.patch(f"{MODULE}.urllib.request", autospec=True)
 @mock.patch(f"{MODULE}.region_list_cache", [])
 def test_get_region_cidr_ranges_bad_data(mock_request):
-    mock_request.urlopen("").read.return_value = json.dumps({
-        "prefixes": [
-            {},
-            {
-                "ip_prefix": "10.0.0.1/24",
-                "region": "us-east-1"
-            }
-        ]
-    }).encode()
+    mock_request.urlopen("").read.return_value = json.dumps(
+        {
+            "prefixes": [
+                {},
+                {
+                    "ip_prefix": "10.0.0.1/24",
+                    "region": "us-east-1",
+                },
+            ],
+        }
+    ).encode()
 
     assert get_region_cidr_ranges() == [
         IPNetwork("10.0.0.1/24"),

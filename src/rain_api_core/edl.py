@@ -32,8 +32,8 @@ class EdlClient:
     def __init__(
         self,
         base_url: str = os.getenv(
-            'AUTH_BASE_URL',
-            'https://urs.earthdata.nasa.gov',
+            "AUTH_BASE_URL",
+            "https://urs.earthdata.nasa.gov",
         ),
     ):
         self.base_url = base_url
@@ -48,9 +48,9 @@ class EdlClient:
     ) -> dict:
         if params:
             params_encoded = urllib.parse.urlencode(params)
-            url_params = f'?{params_encoded}'
+            url_params = f"?{params_encoded}"
         else:
-            url_params = ''
+            url_params = ""
 
         # Separate variables so we can log the url without params
         url = urllib.parse.urljoin(self.base_url, endpoint)
@@ -69,36 +69,36 @@ class EdlClient:
         )
 
         log.debug(
-            'Request(url=%r, data=%r, headers=%r)',
+            "Request(url=%r, data=%r, headers=%r)",
             url_with_params,
             data,
             headers,
         )
 
         timer = Timer()
-        timer.mark(f'urlopen({url})')
+        timer.mark(f"urlopen({url})")
         try:
             with urllib.request.urlopen(request) as f:
                 payload = f.read()
-                timer.mark('json.loads()')
+                timer.mark("json.loads()")
                 msg = json.loads(payload)
             timer.mark()
 
             log.info(
                 return_timing_object(
-                    service='EDL',
+                    service="EDL",
                     endpoint=url,
                     duration=timer.total.duration() * 1000,
-                    unit='milliseconds',
+                    unit="milliseconds",
                 ),
             )
             timer.log_all(log)
 
             return msg
         except urllib.error.URLError as e:
-            log.error('Error hitting endpoint %s: %s', url, e)
+            log.error("Error hitting endpoint %s: %s", url, e)
             timer.mark()
-            log.debug('ET for the attempt: %.4f', timer.total.duration())
+            log.debug("ET for the attempt: %.4f", timer.total.duration())
 
             self._parse_edl_error(e)
         except json.JSONDecodeError as e:
@@ -110,18 +110,18 @@ class EdlClient:
             try:
                 msg = json.loads(payload)
             except json.JSONDecodeError:
-                log.error('Could not get json message from payload: %s', payload)
+                log.error("Could not get json message from payload: %s", payload)
                 msg = {}
 
             if (
                 e.code in (403, 401)
-                and 'error_description' in msg
-                and 'eula' in msg['error_description'].lower()
+                and "error_description" in msg
+                and "eula" in msg["error_description"].lower()
             ):
                 # sample json in this case:
                 # `{"status_code": 403, "error_description": "EULA Acceptance Failure",
                 #   "resolution_url": "http://uat.urs.earthdata.nasa.gov/approve_app?client_id=LqWhtVpLmwaD4VqHeoN7ww"}`
-                log.warning('user needs to sign the EULA')
+                log.warning("user needs to sign the EULA")
                 raise EulaException(e, msg, payload)
         else:
             payload = None

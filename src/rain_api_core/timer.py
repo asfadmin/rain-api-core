@@ -1,11 +1,12 @@
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 
 @dataclass(eq=False)
-class Interval():
+class Interval:
     start: Optional[float] = None
     end: Optional[float] = None
 
@@ -16,7 +17,7 @@ class Interval():
         return self.end - self.start
 
 
-class Timer():
+class Timer:
     """A helper for recording the times of a sequence of events.
 
     This object is not thread safe.
@@ -28,7 +29,7 @@ class Timer():
         self.last_name: Optional[str] = None
         self.total = Interval()
 
-    def mark(self, name: str = None) -> float:
+    def mark(self, name: Optional[str] = None) -> float:
         """Record a new event.
 
         If called without `name`, any previously started event will be marked

@@ -10,7 +10,7 @@ def return_timing_object(**timing):
         "endpoint": "Unknown",
         "method": "GET",
         "duration": 0,
-        "unit": "milliseconds"
+        "unit": "milliseconds",
     }
     timing_object.update({k.lower(): v for k, v in timing.items()})
     return {"timing": timing_object}

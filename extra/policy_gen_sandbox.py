@@ -46,10 +46,7 @@ def main():
     tk.Label(frm_content, text="Bucket map YAML").grid(row=0, column=0)
 
     txt_bucketmap = tk.Text(frm_content)
-    txt_bucketmap.bind(
-        "<Key>",
-        lambda _: window.after(1, handle_text)
-    )
+    txt_bucketmap.bind("<Key>", lambda _: window.after(1, handle_text))
     txt_bucketmap.grid(row=1, column=0, sticky="nsew")
 
     # Policy panel
@@ -65,10 +62,7 @@ def main():
     tk.Label(frm_groups, text="User Groups: ").grid(row=0, column=0)
     var_group = tk.StringVar(value="null")
     entry_groups = tk.Entry(frm_groups, textvariable=var_group)
-    entry_groups.bind(
-        "<Key>",
-        lambda _: window.after(1, handle_text)
-    )
+    entry_groups.bind("<Key>", lambda _: window.after(1, handle_text))
     entry_groups.grid(row=0, column=1)
 
     # Minified size indicator

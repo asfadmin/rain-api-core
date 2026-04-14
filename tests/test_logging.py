@@ -93,7 +93,7 @@ def test_get_log(capsys, monkeypatch):
         "user_id": None,
         "route": None,
         "build": "NOBUILD",
-        "exception": None
+        "exception": None,
     }
 
 
@@ -116,13 +116,13 @@ def test_get_log_json_object(monkeypatch, capsys):
         "OriginRequestId": None,
         "message": {
             "Some": "json",
-            "object": 100
+            "object": 100,
         },
         "maturity": "DEV",
         "user_id": None,
         "route": None,
         "build": "NOBUILD",
-        "exception": None
+        "exception": None,
     }
 
 
@@ -148,7 +148,7 @@ def test_get_log_json_object_exception(monkeypatch, capsys):
         "OriginRequestId": None,
         "message": {
             "Some": "json",
-            "object": 100
+            "object": 100,
         },
         "maturity": "DEV",
         "user_id": None,
@@ -158,8 +158,8 @@ def test_get_log_json_object_exception(monkeypatch, capsys):
             "Traceback (most recent call last):",
             mock.ANY,
             '    raise Exception("Test Exception")',
-            "Exception: Test Exception"
-        ]
+            "Exception: Test Exception",
+        ],
     }
 
 
@@ -176,7 +176,7 @@ def test_get_log_flat(capsys, monkeypatch):
     assert re.match(
         r"INFO: test message: 100, Creds: Basic XXX<BASICAUTH>XXX \([a-z_]+.py line [0-9]+/NOBUILD/DEV\) - "
         "RequestId: None; OriginRequestId: None; user_id: None; route: None\n",
-        stdout
+        stdout,
     )
 
 
@@ -195,7 +195,9 @@ def test_filter_log_credentials():
     EDL_TOKEN = "EDL-ABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCC"
     BASIC_AUTH_TOKEN = "Basic AAAAABBBBB"
     AWS_TOKEN = ":AAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCC:"
-    assert filter_log_credentials(JWT_TOKEN) == "eyJ0eXAiOiJKV1QXXX<JWTTOKEN>XXXuexWU3mqgA"
+    assert (
+        filter_log_credentials(JWT_TOKEN) == "eyJ0eXAiOiJKV1QXXX<JWTTOKEN>XXXuexWU3mqgA"
+    )
     assert filter_log_credentials(EDL_TOKEN) == "EDL-AXXX<EDLTOKEN>XXXCCCCCCCCCC"
     assert filter_log_credentials(BASIC_AUTH_TOKEN) == "Basic XXX<BASICAUTH>XXX"
     assert filter_log_credentials(AWS_TOKEN) == ":AAAAAXXX<AWSSECRET>XXXCCCCC:"
@@ -255,7 +257,7 @@ def test_json_logging_exception(logger, caplog):
 
 def test_json_logging_quotes(logger, log_io):
     obj = {
-        "foo': 'baz', 'qux": "bar"
+        "foo': 'baz', 'qux": "bar",
     }
     logger.info(obj)
 
@@ -266,7 +268,7 @@ def test_json_logging_quotes(logger, log_io):
 
 def test_json_logging_quotes_malformed(logger, log_io):
     obj = {
-        "foo'": "bar"
+        "foo'": "bar",
     }
     logger.info(obj)
 
@@ -276,7 +278,7 @@ def test_json_logging_quotes_malformed(logger, log_io):
 
 
 def test_json_logging_not_serializable(logger, log_io):
-    class SomeClass():
+    class SomeClass:
         def __repr__(self) -> str:
             return "SomeClass()"
 
@@ -302,28 +304,32 @@ def test_json_logging_time_as_field(logger, custom_log_handler, log_io):
 
 
 def test_json_logging_time_in_field(logger, custom_log_handler, log_io):
-    custom_log_handler.setFormatter(JSONFormatter("the time is %(asctime)s", datefmt="the_date"))
+    custom_log_handler.setFormatter(
+        JSONFormatter("the time is %(asctime)s", datefmt="the_date")
+    )
     logger.info("hello")
 
     assert log_io.getvalue() == '"the time is the_date"\n'
 
 
 def test_json_logging_deep_format(logger, custom_log_handler, log_io):
-    custom_log_handler.setFormatter(JSONFormatter({
-        "key1": {
-            "route": "%(route)s",
-            "key2": [
-                {"message": "%(message)s"},
-                {"message": "%(message)s", "maturity": "%(maturity)s"},
-                {
-                    "key3": ["%(build_vers)s"]
-                }
-            ]
-        },
-        "constant": 100,
-        "string_constant": "FOO",
-        "format_string": "%(request_id)s from %(origin_request_id)s"
-    }))
+    custom_log_handler.setFormatter(
+        JSONFormatter(
+            {
+                "key1": {
+                    "route": "%(route)s",
+                    "key2": [
+                        {"message": "%(message)s"},
+                        {"message": "%(message)s", "maturity": "%(maturity)s"},
+                        {"key3": ["%(build_vers)s"]},
+                    ],
+                },
+                "constant": 100,
+                "string_constant": "FOO",
+                "format_string": "%(request_id)s from %(origin_request_id)s",
+            }
+        )
+    )
     obj = {"foo": "bar"}
     logger.info(obj)
 
@@ -335,11 +341,11 @@ def test_json_logging_deep_format(logger, custom_log_handler, log_io):
                 {"message": obj},
                 {"message": obj, "maturity": "DEV"},
                 {
-                    "key3": ["NOBUILD"]
-                }
-            ]
+                    "key3": ["NOBUILD"],
+                },
+            ],
         },
         "constant": 100,
         "string_constant": "FOO",
-        "format_string": "the_request_id from the_origin_request_id"
+        "format_string": "the_request_id from the_origin_request_id",
     }

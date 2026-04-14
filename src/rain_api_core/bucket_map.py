@@ -1,6 +1,7 @@
 from collections import defaultdict
+from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Generator, Iterable, Optional, Sequence, Tuple
+from typing import Optional
 
 # By default, buckets are accessible to any logged in users. This is
 # represented by an empty set.
@@ -8,8 +9,8 @@ _DEFAULT_PERMISSION_FACTORY = set
 
 
 def _is_accessible(
-    required_groups: Optional[set],
-    groups: Optional[Iterable[str]]
+    required_groups: Optional[set[str]],
+    groups: Optional[Iterable[str]],
 ) -> bool:
     # Check for public access
     if required_groups is None:
@@ -23,14 +24,14 @@ def _is_accessible(
 
 
 @dataclass()
-class BucketMapEntry():
+class BucketMapEntry:
     bucket: str
     bucket_path: str
     object_key: str
     headers: dict = field(default_factory=dict)
     _access_control: Optional[dict] = None
 
-    def is_accessible(self, groups: Iterable[str] = None) -> bool:
+    def is_accessible(self, groups: Optional[Iterable[str]] = None) -> bool:
         """Check if the object is accessible with the given permissions.
 
         Setting `groups` to an iterable implies that the user has logged in,
@@ -41,7 +42,7 @@ class BucketMapEntry():
         required_groups = self.get_required_groups()
         return _is_accessible(required_groups, groups)
 
-    def get_required_groups(self) -> Optional[set]:
+    def get_required_groups(self) -> Optional[set[str]]:
         """Get a set of permissions protecting this object.
 
         It is sufficient to have one of the permissions in the set in order to
@@ -60,13 +61,13 @@ class BucketMapEntry():
         return _DEFAULT_PERMISSION_FACTORY()
 
 
-class BucketMap():
+class BucketMap:
     def __init__(
         self,
         bucket_map: dict,
         bucket_name_prefix: str = "",
         reverse: bool = False,
-        iam_compatible: bool = True
+        iam_compatible: bool = True,
     ):
         self.bucket_map = bucket_map
         self.access_control = _parse_access_control(bucket_map)
@@ -121,21 +122,21 @@ class BucketMap():
                 bucket=bucket,
                 bucket_path=bucket_path,
                 object_key=object_key,
-                headers=headers
+                headers=headers,
             )
 
         return None
 
-    def entries(self):
+    def entries(self) -> Generator[BucketMapEntry]:
         for bucket, path_parts, headers in _walk_entries(self._get_map()):
             yield self._make_entry(
                 bucket=bucket,
                 bucket_path="/".join(path_parts),
                 object_key="",
-                headers=headers
+                headers=headers,
             )
 
-    def to_iam_policy(self, groups: Iterable[str] = None) -> dict:
+    def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
         generator = IamPolicyGenerator(groups)
@@ -150,8 +151,8 @@ class BucketMap():
         bucket: str,
         bucket_path: str,
         object_key: str,
-        headers: Optional[dict] = None
-    ):
+        headers: Optional[dict] = None,
+    ) -> BucketMapEntry:
         return BucketMapEntry(
             bucket=self.bucket_name_prefix + bucket,
             bucket_path=bucket_path,
@@ -160,11 +161,11 @@ class BucketMap():
             # TODO(reweeden): Do we really want to control access by
             # bucket? Wouldn't it make more sense to control access by
             # path instead?
-            _access_control=self.access_control.get(bucket)
+            _access_control=self.access_control.get(bucket),
         )
 
 
-def _walk_entries(node: dict, path=()) -> Generator[Tuple[str, tuple, Optional[dict]], None, None]:
+def _walk_entries(node: dict, path=()) -> Generator[tuple[str, tuple, Optional[dict]]]:
     """A generator to recursively yield all leaves of a bucket map"""
 
     for key, val in node.items():
@@ -221,7 +222,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     # Convert to dictionary for easier lookup on individual buckets
     # We're relying on python's dictionary keys being insertion ordered
     access = defaultdict(dict)
-    for (rule, obj) in access_list:
+    for rule, obj in access_list:
         bucket, *prefix = rule.split("/", 1)
         access[bucket]["".join(prefix)] = obj
 
@@ -274,12 +275,13 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
     # generated bucketmap that makes heavy use of prefix permissions
     longest_prefix, _ = max(
         (
+            # ruff hint
             (k, len(k))
             for k in prefixes
             if key.startswith(k) and key != k
         ),
         key=lambda x: x[1],
-        default=(None, 0)
+        default=(None, 0),
     )
     return longest_prefix
 
@@ -294,7 +296,7 @@ def _access_text(access) -> str:
 
 
 class IamPolicyGenerator:
-    def __init__(self, groups: Iterable[str]):
+    def __init__(self, groups: Optional[Iterable[str]]):
         self.groups = groups
 
     def _is_accessible(self, required_groups: Optional[set]) -> bool:
@@ -303,6 +305,7 @@ class IamPolicyGenerator:
     def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
         # Dedupe across buckets
         bucket_access = {
+            # ruff hint
             entry.bucket: entry._access_control
             for entry in entries
         }
@@ -319,7 +322,9 @@ class IamPolicyGenerator:
                     get_object_statement.add_action("s3:ListBucket")
                     get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
 
-                get_object_statement.add_resource(f"arn:aws:s3:::{bucket}/{key_prefix}*")
+                get_object_statement.add_resource(
+                    f"arn:aws:s3:::{bucket}/{key_prefix}*",
+                )
 
         if not get_object_statement.resource:
             return None
@@ -340,13 +345,13 @@ class IamPolicyGenerator:
                         resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
                         condition={
                             "StringLike": {
-                                "s3:prefix": [f"{prefix}*" for prefix in prefixes]
-                            }
-                        }
+                                "s3:prefix": [f"{prefix}*" for prefix in prefixes],
+                            },
+                        },
                     ).to_dict()
                     for buckets, prefixes in list_bucket_conditions.items()
-                )
-            ]
+                ),
+            ],
         }
 
     def _consolidate_access_rules(self, access_control: Optional[dict]) -> dict:
@@ -394,8 +399,8 @@ class _IamStatement:
     ):
         self.effect = effect
         # Using dict instead of set because sets are unordered.
-        self.action = dict((val, None) for val in action)
-        self.resource = dict((val, None) for val in resource)
+        self.action = {val: None for val in action}
+        self.resource = {val: None for val in resource}
         self.condition = condition
 
     def add_action(self, value: str):
@@ -415,7 +420,7 @@ class _IamStatement:
         statement = {
             "Effect": self.effect,
             "Action": list(self.action),
-            "Resource": list(self.resource)
+            "Resource": list(self.resource),
         }
         if self.condition is not None:
             statement["Condition"] = self.condition

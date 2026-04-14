@@ -15,19 +15,19 @@ def sample_bucket_map():
             "productX": "bucket",
             "nested": {
                 "nested2a": {
-                    "nested3": "nested-bucket-public"
+                    "nested3": "nested-bucket-public",
                 },
-                "nested2b": "nested-bucket-private"
-            }
+                "nested2b": "nested-bucket-private",
+            },
         },
         "PUBLIC_BUCKETS": {
             "browse-bucket": "General browse Imagery",
-            "bucket/browse": "ProductX Browse Imagery"
+            "bucket/browse": "ProductX Browse Imagery",
         },
         "PRIVATE_BUCKETS": {
             "bucket/2020/12": ["science_team"],
-            "nested-bucket-private": []
-        }
+            "nested-bucket-private": [],
+        },
     }
 
 
@@ -41,19 +41,19 @@ def sample_bucket_map_iam():
             "productX": "bucket",
             "nested": {
                 "nested2a": {
-                    "nested3": "nested-bucket-public"
+                    "nested3": "nested-bucket-public",
                 },
-                "nested2b": "nested-bucket-private"
-            }
+                "nested2b": "nested-bucket-private",
+            },
         },
         "PUBLIC_BUCKETS": {
             "browse-bucket": "General browse Imagery",
-            "bucket/browse": "ProductX Browse Imagery"
+            "bucket/browse": "ProductX Browse Imagery",
         },
         "PRIVATE_BUCKETS": {
             "bucket": ["science_team"],
-            "nested-bucket-private": []
-        }
+            "nested-bucket-private": [],
+        },
     }
 
 
@@ -67,7 +67,7 @@ def groups_bucket_map():
             "bucket1": ["group1"],
             "bucket2": ["group2"],
             "bucket3": ["group3"],
-        }
+        },
     }
 
 
@@ -78,12 +78,14 @@ def test_get_simple():
     b_map = BucketMap(bucket_map, bucket_name_prefix="pre-")
 
     entry = b_map.get("PATH/obj1")
+    assert entry is not None
     assert entry.bucket == "pre-bucket-name"
     assert entry.bucket_path == "PATH"
     assert entry.object_key == "obj1"
     assert entry.headers == {}
 
     dir_entry = b_map.get("PATH/")
+    assert dir_entry is not None
     assert dir_entry.bucket == "pre-bucket-name"
     assert dir_entry.bucket_path == "PATH"
     assert dir_entry.object_key == ""
@@ -98,13 +100,14 @@ def test_get_simple():
     (
         {"foo": "bucket1"},
         {"foo": {"bucket": "bucket1"}},
-        {"MAP": {"foo": {"bucket": "bucket1"}}}
-    )
+        {"MAP": {"foo": {"bucket": "bucket1"}}},
+    ),
 )
 def test_get_compatibility(bucket_map):
     b_map = BucketMap(bucket_map)
     entry = b_map.get("foo/bar")
 
+    assert entry is not None
     assert entry.bucket == "bucket1"
     assert entry.bucket_path == "foo"
     assert entry.object_key == "bar"
@@ -115,20 +118,22 @@ def test_get_nested():
     bucket_map = {
         "PATH": {
             "LEVEL1": {
-                "LEVEL2": "bucket-name"
-            }
+                "LEVEL2": "bucket-name",
+            },
         },
     }
 
     b_map = BucketMap(bucket_map)
 
     entry = b_map.get("PATH/LEVEL1/LEVEL2/obj1")
+    assert entry is not None
     assert entry.bucket == "bucket-name"
     assert entry.bucket_path == "PATH/LEVEL1/LEVEL2"
     assert entry.object_key == "obj1"
     assert entry.headers == {}
 
     dir_entry = b_map.get("PATH/LEVEL1/LEVEL2/")
+    assert dir_entry is not None
     assert dir_entry.bucket == "bucket-name"
     assert dir_entry.bucket_path == "PATH/LEVEL1/LEVEL2"
     assert dir_entry.object_key == ""
@@ -142,19 +147,21 @@ def test_get_with_headers():
         "PATH": {
             "bucket": "bucket-name",
             "headers": {
-                "Header1": "Value1"
-            }
-        }
+                "Header1": "Value1",
+            },
+        },
     }
     b_map = BucketMap(bucket_map)
 
     entry = b_map.get("PATH/obj1")
+    assert entry is not None
     assert entry.bucket == "bucket-name"
     assert entry.bucket_path == "PATH"
     assert entry.object_key == "obj1"
     assert entry.headers == {"Header1": "Value1"}
 
     dir_entry = b_map.get("PATH/")
+    assert dir_entry is not None
     assert dir_entry.bucket == "bucket-name"
     assert dir_entry.bucket_path == "PATH"
     assert dir_entry.object_key == ""
@@ -166,19 +173,21 @@ def test_get_with_headers():
 def test_get_reverse():
     bucket_map = {
         "PATH": {
-            "STAGE": "bucket-name"
-        }
+            "STAGE": "bucket-name",
+        },
     }
     b_map = BucketMap(bucket_map, reverse=True)
 
     entry = b_map.get("STAGE/PATH/obj1")
+    assert entry is not None
     assert entry.bucket == "bucket-name"
     assert entry.bucket_path == "PATH/STAGE"
     assert entry.object_key == "obj1"
 
     dir_entry = b_map.get("STAGE/PATH/")
+    assert dir_entry is not None
     assert dir_entry.bucket == "bucket-name"
-    assert entry.bucket_path == "PATH/STAGE"
+    assert dir_entry.bucket_path == "PATH/STAGE"
     assert dir_entry.object_key == ""
 
     assert b_map.get("STAGE/PATH") is None
@@ -189,8 +198,8 @@ def test_get_reverse():
     (
         {"foo": "bucket1"},
         {"foo": {"bucket": "bucket1"}},
-        {"MAP": {"foo": {"bucket": "bucket1"}}}
-    )
+        {"MAP": {"foo": {"bucket": "bucket1"}}},
+    ),
 )
 def test_get_path_compatibility(bucket_map):
     # Using a tuple instead of a list to ensure the input is not modified
@@ -201,6 +210,7 @@ def test_get_path_compatibility(bucket_map):
     b_map = BucketMap(bucket_map)
     entry = b_map.get_path(path_list)
 
+    assert entry is not None
     assert entry.bucket == "bucket1"
     assert entry.bucket_path == "foo"
     assert entry.object_key == "bar/baz"
@@ -241,7 +251,7 @@ def test_entries_simple():
 def test_entries_multiple():
     bucket_map = {
         "PATH": "bucket1",
-        "PATH2": "bucket2"
+        "PATH2": "bucket2",
     }
     b_map = BucketMap(bucket_map, bucket_name_prefix="pre-")
 
@@ -255,7 +265,7 @@ def test_entries_multiple():
             bucket="pre-bucket2",
             bucket_path="PATH2",
             object_key="",
-        )
+        ),
     ]
 
 
@@ -264,8 +274,8 @@ def test_entries_multiple():
     (
         {"foo": "bucket1"},
         {"foo": {"bucket": "bucket1"}},
-        {"MAP": {"foo": {"bucket": "bucket1"}}}
-    )
+        {"MAP": {"foo": {"bucket": "bucket1"}}},
+    ),
 )
 def test_entries_compatibility(bucket_map):
     b_map = BucketMap(bucket_map)
@@ -283,8 +293,8 @@ def test_entries_nested():
     bucket_map = {
         "PATH": {
             "LEVEL1": {
-                "LEVEL2": "bucket-name"
-            }
+                "LEVEL2": "bucket-name",
+            },
         },
     }
 
@@ -312,7 +322,7 @@ def test_entries(sample_bucket_map):
             bucket="browse-bucket",
             bucket_path="general-browse",
             object_key="",
-            _access_control={"": None}
+            _access_control={"": None},
         ),
         BucketMapEntry(
             bucket="bucket",
@@ -321,8 +331,8 @@ def test_entries(sample_bucket_map):
             _access_control={
                 "2020/12": {"science_team"},
                 "browse": None,
-                "": set()
-            }
+                "": set(),
+            },
         ),
         BucketMapEntry(
             bucket="nested-bucket-public",
@@ -333,7 +343,7 @@ def test_entries(sample_bucket_map):
             bucket="nested-bucket-private",
             bucket_path="nested/nested2b",
             object_key="",
-            _access_control={"": set()}
+            _access_control={"": set()},
         ),
     ]
 
@@ -343,9 +353,9 @@ def test_entries_with_headers():
         "PATH": {
             "bucket": "bucket-name",
             "headers": {
-                "Header1": "Value1"
-            }
-        }
+                "Header1": "Value1",
+            },
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -354,7 +364,7 @@ def test_entries_with_headers():
             bucket="bucket-name",
             bucket_path="PATH",
             object_key="",
-            headers={"Header1": "Value1"}
+            headers={"Header1": "Value1"},
         )
     ]
 
@@ -369,10 +379,18 @@ def test_check_bucket_access(sample_bucket_map):
     assert b_map.get("ANY_AUTHED/obj1").is_accessible() is False
     assert b_map.get("ANY_AUTHED/obj1").is_accessible(groups=[]) is True
     assert b_map.get("general-browse/obj1").is_accessible() is True
-    assert b_map.get("general-browse/obj1").is_accessible(groups=["science_team"]) is True
+    assert (
+        b_map.get("general-browse/obj1").is_accessible(groups=["science_team"]) is True
+    )
     assert b_map.get("productX/browse/obj1").is_accessible() is True
-    assert b_map.get("productX/2020/12/obj1").is_accessible(groups=["science_team"]) is True
-    assert b_map.get("productX/2020/23/obj2").is_accessible(groups=["science_team"]) is True
+    assert (
+        b_map.get("productX/2020/12/obj1").is_accessible(groups=["science_team"])
+        is True
+    )
+    assert (
+        b_map.get("productX/2020/23/obj2").is_accessible(groups=["science_team"])
+        is True
+    )
     assert b_map.get("productX/2020/12/obj1").is_accessible() is False
     assert b_map.get("nested/nested2b/obj1").is_accessible() is False
     assert b_map.get("nested/nested2b/obj1").is_accessible(groups=[]) is True
@@ -382,14 +400,14 @@ def test_check_bucket_access_conflicting():
     # When a bucket is configured to be both public and private
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
-            "bucket"
+            "bucket",
         ],
         "PRIVATE_BUCKETS": {
-            "bucket": ["some_permission"]
-        }
+            "bucket": ["some_permission"],
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -401,15 +419,15 @@ def test_check_bucket_access_longest_prefix_first():
     # Longer prefixes should be checked first
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
-            "bucket"
+            "bucket",
         ],
         "PRIVATE_BUCKETS": {
             "bucket/foobar": ["other_permission"],
             "bucket/foo": ["some_permission"],
-        }
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
@@ -422,15 +440,15 @@ def test_check_bucket_access_longest_prefix_first_order():
     # Longer prefixes should be checked first
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
-            "bucket"
+            "bucket",
         ],
         "PRIVATE_BUCKETS": {
             "bucket/foo": ["some_permission"],
             "bucket/foobar": ["other_permission"],
-        }
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
@@ -443,16 +461,16 @@ def test_check_bucket_access_longest_prefix_first_conflicting():
     # Longer prefixes should be checked first
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
             "bucket/foo",
-            "bucket/foobar"
+            "bucket/foobar",
         ],
         "PRIVATE_BUCKETS": {
             "bucket/foo": ["some_permission"],
             "bucket/foobar": ["other_permission"],
-        }
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
@@ -466,17 +484,17 @@ def test_check_bucket_access_nested_paths():
         "MAP": {
             "nested": {
                 "nested2a": {
-                    "nested3": "nested-bucket-public"
+                    "nested3": "nested-bucket-public",
                 },
-                "nested2b": "nested-bucket-private"
-            }
+                "nested2b": "nested-bucket-private",
+            },
         },
         "PUBLIC_BUCKETS": {
-            "nested-bucket-public": "Public bucket in 'nested'"
+            "nested-bucket-public": "Public bucket in 'nested'",
         },
         "PRIVATE_BUCKETS": {
-            "nested-bucket-private": ["science_team"]
-        }
+            "nested-bucket-private": ["science_team"],
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -485,50 +503,62 @@ def test_check_bucket_access_nested_paths():
     assert b_map.get("nested/nested2a/nested3") is None
 
     assert b_map.get("nested/nested2b/obj1").is_accessible() is False
-    assert b_map.get("nested/nested2b/obj1").is_accessible(groups=["wrong_group"]) is False
-    assert b_map.get("nested/nested2b/obj1").is_accessible(groups=["science_team"]) is True
+    assert (
+        b_map.get("nested/nested2b/obj1").is_accessible(groups=["wrong_group"]) is False
+    )
+    assert (
+        b_map.get("nested/nested2b/obj1").is_accessible(groups=["science_team"]) is True
+    )
     assert b_map.get("nested/nested2a/nested3/obj1").is_accessible() is True
 
 
 def test_check_bucket_access_nested_private_first():
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
-            "bucket/foo/browse"
+            "bucket/foo/browse",
         ],
         "PRIVATE_BUCKETS": {
-            "bucket/foo": ["some_permission"]
-        }
+            "bucket/foo": ["some_permission"],
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
     assert b_map.get("PATH/obj1").is_accessible() is False
     assert b_map.get("PATH/foo/obj1").is_accessible() is False
     assert b_map.get("PATH/foo/obj1").is_accessible(groups=["some_permission"]) is True
-    assert b_map.get("PATH/foo/browse/obj1").is_accessible(groups=["some_permission"]) is True
+    assert (
+        b_map.get("PATH/foo/browse/obj1").is_accessible(groups=["some_permission"])
+        is True
+    )
     assert b_map.get("PATH/foo/browse/obj1").is_accessible() is True
 
 
 def test_check_bucket_access_nested_public_first():
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
         "PUBLIC_BUCKETS": [
-            "bucket/browse"
+            "bucket/browse",
         ],
         "PRIVATE_BUCKETS": {
-            "bucket/browse/foo": ["some_permission"]
-        }
+            "bucket/browse/foo": ["some_permission"],
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
     assert b_map.get("PATH/obj1").is_accessible() is False
     assert b_map.get("PATH/browse/foo/obj1").is_accessible() is False
-    assert b_map.get("PATH/browse/foo/obj1").is_accessible(groups=["some_permission"]) is True
-    assert b_map.get("PATH/browse/obj1").is_accessible(groups=["some_permission"]) is True
+    assert (
+        b_map.get("PATH/browse/foo/obj1").is_accessible(groups=["some_permission"])
+        is True
+    )
+    assert (
+        b_map.get("PATH/browse/obj1").is_accessible(groups=["some_permission"]) is True
+    )
     assert b_map.get("PATH/browse/obj1").is_accessible() is True
 
 
@@ -536,27 +566,27 @@ def test_check_iam_compatible_nested_private_first():
     _ = BucketMap(
         {
             "PUBLIC_BUCKETS": ["bucket/browse"],
-            "PRIVATE_BUCKETS": {"bucket": ["group_1"]}
+            "PRIVATE_BUCKETS": {"bucket": ["group_1"]},
         },
-        iam_compatible=True
+        iam_compatible=True,
     )
     _ = BucketMap(
         {
             "PRIVATE_BUCKETS": {
                 "bucket": ["group_1"],
-                "bucket/foo/": ["group_1", "group_2"]
-            }
+                "bucket/foo/": ["group_1", "group_2"],
+            },
         },
-        iam_compatible=True
+        iam_compatible=True,
     )
     _ = BucketMap(
         {
             "PRIVATE_BUCKETS": {
                 "bucket": ["group_1"],
-                "bucket/foo/": []
-            }
+                "bucket/foo/": [],
+            },
         },
-        iam_compatible=True
+        iam_compatible=True,
     )
 
 
@@ -564,19 +594,17 @@ def test_check_iam_compatible_nested_protected_then_private():
     with pytest.raises(ValueError):
         _ = BucketMap(
             {
-                "PRIVATE_BUCKETS": {
-                    "bucket/foo/": ["group_1"]
-                }
+                "PRIVATE_BUCKETS": {"bucket/foo/": ["group_1"]},
             },
-            iam_compatible=True
+            iam_compatible=True,
         )
 
     with pytest.raises(ValueError):
         _ = BucketMap(
             {
-                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]}
+                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]},
             },
-            iam_compatible=True
+            iam_compatible=True,
         )
 
 
@@ -585,26 +613,26 @@ def test_check_iam_compatible_nested_public_first():
         _ = BucketMap(
             {
                 "PUBLIC_BUCKETS": ["bucket"],
-                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]}
+                "PRIVATE_BUCKETS": {"bucket/foo": ["group_1"]},
             },
-            iam_compatible=True
+            iam_compatible=True,
         )
     with pytest.raises(ValueError, match="'foo' has protected access"):
         _ = BucketMap(
             {
                 "PUBLIC_BUCKETS": ["bucket"],
-                "PRIVATE_BUCKETS": {"bucket/foo": []}
+                "PRIVATE_BUCKETS": {"bucket/foo": []},
             },
-            iam_compatible=True
+            iam_compatible=True,
         )
 
 
 def test_check_bucket_access_malformed():
     bucket_map = {
         "MAP": {
-            "PATH": "bucket"
+            "PATH": "bucket",
         },
-        "PUBLIC_BUCKETS": 10
+        "PUBLIC_BUCKETS": 10,
     }
     b_map = BucketMap(bucket_map)
 
@@ -642,10 +670,10 @@ def test_to_iam_policy_simple():
                 "Action": ["s3:GetObject", "s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ]
-            }
-        ]
+                    "arn:aws:s3:::bucket-name/*",
+                ],
+            },
+        ],
     }
 
 
@@ -670,10 +698,10 @@ def test_to_iam_policy_simple_duplicates():
                     "arn:aws:s3:::bucket-name1",
                     "arn:aws:s3:::bucket-name1/*",
                     "arn:aws:s3:::bucket-name2",
-                    "arn:aws:s3:::bucket-name2/*"
-                ]
+                    "arn:aws:s3:::bucket-name2/*",
+                ],
             }
-        ]
+        ],
     }
 
 
@@ -681,8 +709,8 @@ def test_to_iam_policy_private():
     bucket_map = {
         "PATH": "bucket-name",
         "PRIVATE_BUCKETS": {
-            "bucket-name": ["science_team"]
-        }
+            "bucket-name": ["science_team"],
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -693,11 +721,11 @@ def test_to_iam_policy_private_with_public_prefix():
     bucket_map = {
         "PATH": "bucket-name",
         "PUBLIC_BUCKETS": {
-            "bucket-name/public/": "Public browse imagery"
+            "bucket-name/public/": "Public browse imagery",
         },
         "PRIVATE_BUCKETS": {
             "bucket-name": ["science_team"],
-        }
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -708,8 +736,8 @@ def test_to_iam_policy_private_with_public_prefix():
                 "Effect": "Allow",
                 "Action": ["s3:GetObject"],
                 "Resource": [
-                    "arn:aws:s3:::bucket-name/public/*"
-                ]
+                    "arn:aws:s3:::bucket-name/public/*",
+                ],
             },
             {
                 "Effect": "Allow",
@@ -719,11 +747,11 @@ def test_to_iam_policy_private_with_public_prefix():
                 ],
                 "Condition": {
                     "StringLike": {
-                        "s3:prefix": ["public/*"]
-                    }
-                }
-            }
-        ]
+                        "s3:prefix": ["public/*"],
+                    },
+                },
+            },
+        ],
     }
 
 
@@ -732,8 +760,8 @@ def test_to_iam_policy_private_with_protected_prefix():
         "PATH": "bucket-name",
         "PRIVATE_BUCKETS": {
             "bucket-name": ["science_team"],
-            "bucket-name/public/": []
-        }
+            "bucket-name/public/": [],
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -744,8 +772,8 @@ def test_to_iam_policy_private_with_protected_prefix():
                 "Effect": "Allow",
                 "Action": ["s3:GetObject"],
                 "Resource": [
-                    "arn:aws:s3:::bucket-name/public/*"
-                ]
+                    "arn:aws:s3:::bucket-name/public/*",
+                ],
             },
             {
                 "Effect": "Allow",
@@ -755,13 +783,11 @@ def test_to_iam_policy_private_with_protected_prefix():
                 ],
                 "Condition": {
                     "StringLike": {
-                        "s3:prefix": [
-                            "public/*"
-                        ]
-                    }
-                }
-            }
-        ]
+                        "s3:prefix": ["public/*"],
+                    },
+                },
+            },
+        ],
     }
 
 
@@ -770,8 +796,8 @@ def test_to_iam_policy_private_with_protected_prefix_full_access():
         "PATH": "bucket-name",
         "PRIVATE_BUCKETS": {
             "bucket-name": ["science_team"],
-            "bucket-name/public/": []
-        }
+            "bucket-name/public/": [],
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -783,10 +809,10 @@ def test_to_iam_policy_private_with_protected_prefix_full_access():
                 "Action": ["s3:GetObject", "s3:ListBucket"],
                 "Resource": [
                     "arn:aws:s3:::bucket-name",
-                    "arn:aws:s3:::bucket-name/*"
-                ]
+                    "arn:aws:s3:::bucket-name/*",
+                ],
             }
-        ]
+        ],
     }
 
 
@@ -801,7 +827,7 @@ def test_to_iam_policy_private_with_multiple_nested_private():
             "bucket-name/closed1/open1/": [],
             "bucket-name/closed1/open2/": [],
             "bucket-name/closed1/open3/": [],
-        }
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -815,7 +841,7 @@ def test_to_iam_policy_private_with_multiple_nested_private():
                     "arn:aws:s3:::bucket-name/closed1/open1/*",
                     "arn:aws:s3:::bucket-name/closed1/open2/*",
                     "arn:aws:s3:::bucket-name/closed1/open3/*",
-                ]
+                ],
             },
             {
                 "Effect": "Allow",
@@ -828,12 +854,12 @@ def test_to_iam_policy_private_with_multiple_nested_private():
                         "s3:prefix": [
                             "closed1/open1/*",
                             "closed1/open2/*",
-                            "closed1/open3/*"
+                            "closed1/open3/*",
                         ]
                     }
-                }
-            }
-        ]
+                },
+            },
+        ],
     }
 
 
@@ -848,7 +874,7 @@ def test_to_iam_policy_private_with_multiple_nested_protected_multiple_buckets()
             "bucket2/closed2/": ["science_team"],
             "bucket1/closed1/open1/": [],
             "bucket2/closed1/open2/": [],
-        }
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -861,7 +887,7 @@ def test_to_iam_policy_private_with_multiple_nested_protected_multiple_buckets()
                 "Resource": [
                     "arn:aws:s3:::bucket1/closed1/open1/*",
                     "arn:aws:s3:::bucket2/closed1/open2/*",
-                ]
+                ],
             },
             {
                 "Effect": "Allow",
@@ -875,7 +901,7 @@ def test_to_iam_policy_private_with_multiple_nested_protected_multiple_buckets()
                             "closed1/open1/*",
                         ]
                     }
-                }
+                },
             },
             {
                 "Effect": "Allow",
@@ -889,9 +915,9 @@ def test_to_iam_policy_private_with_multiple_nested_protected_multiple_buckets()
                             "closed1/open2/*",
                         ]
                     }
-                }
-            }
-        ]
+                },
+            },
+        ],
     }
 
 
@@ -904,7 +930,7 @@ def test_to_iam_policy_merge_prefix_resources():
             "bucket2": ["science_team"],
             "bucket1/theprefix/": [],
             "bucket2/theprefix/": [],
-        }
+        },
     }
     b_map = BucketMap(bucket_map)
 
@@ -917,7 +943,7 @@ def test_to_iam_policy_merge_prefix_resources():
                 "Resource": [
                     "arn:aws:s3:::bucket1/theprefix/*",
                     "arn:aws:s3:::bucket2/theprefix/*",
-                ]
+                ],
             },
             {
                 "Effect": "Allow",
@@ -932,9 +958,9 @@ def test_to_iam_policy_merge_prefix_resources():
                             "theprefix/*",
                         ]
                     }
-                }
-            }
-        ]
+                },
+            },
+        ],
     }
 
 
@@ -957,7 +983,7 @@ def test_to_iam_policy(sample_bucket_map_iam):
                     "arn:aws:s3:::pre-nested-bucket-public/*",
                     "arn:aws:s3:::pre-nested-bucket-private",
                     "arn:aws:s3:::pre-nested-bucket-private/*",
-                ]
+                ],
             },
             {
                 "Effect": "Allow",
@@ -971,9 +997,9 @@ def test_to_iam_policy(sample_bucket_map_iam):
                             "browse*",
                         ]
                     }
-                }
-            }
-        ]
+                },
+            },
+        ],
     }
 
 
@@ -981,12 +1007,12 @@ def test_to_iam_policy_checks_compatibility():
     bucket_map = {
         "PATH": "bucket",
         "PRIVATE_BUCKETS": {
-            "bucket/foo/": ["group"]
-        }
+            "bucket/foo/": ["group"],
+        },
     }
     b_map = BucketMap(bucket_map, iam_compatible=False)
 
-    with pytest.raises(ValueError, match="'foo/' has {'group'}"):
+    with pytest.raises(ValueError, match=r"'foo/' has {'group'}"):
         b_map.to_iam_policy()
 
 
@@ -1009,9 +1035,9 @@ def test_to_iam_policy_groups_single_access(groups_bucket_map):
                 "Resource": [
                     "arn:aws:s3:::bucket1",
                     "arn:aws:s3:::bucket1/*",
-                ]
+                ],
             }
-        ]
+        ],
     }
 
     assert b_map.to_iam_policy(groups=("group2",)) == {
@@ -1023,9 +1049,9 @@ def test_to_iam_policy_groups_single_access(groups_bucket_map):
                 "Resource": [
                     "arn:aws:s3:::bucket2",
                     "arn:aws:s3:::bucket2/*",
-                ]
+                ],
             }
-        ]
+        ],
     }
 
 
@@ -1042,7 +1068,7 @@ def test_to_iam_policy_groups_multiple_access(groups_bucket_map):
                     "arn:aws:s3:::bucket2/*",
                     "arn:aws:s3:::bucket3",
                     "arn:aws:s3:::bucket3/*",
-                ]
+                ],
             }
-        ]
+        ],
     }

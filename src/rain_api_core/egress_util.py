@@ -30,37 +30,41 @@ def get_presigned_url(
     region_name,
     expire_seconds,
     user_id,
-    method='GET',
-    api_request_uuid=None
+    method="GET",
+    api_request_uuid=None,
 ) -> str:
-    timez = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    timez = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     datez = timez[:8]
     region_id = "." + region_name if region_name != "us-east-1" else ""
     hostname = f"{bucket_name}.s3{region_id}.amazonaws.com"
     object_name = urllib.parse.quote(object_name)
 
-    cred = session['Credentials']['AccessKeyId']
-    secret = session['Credentials']['SecretAccessKey']
-    token = session['Credentials']['SessionToken']
+    cred = session["Credentials"]["AccessKeyId"]
+    secret = session["Credentials"]["SecretAccessKey"]
+    token = session["Credentials"]["SessionToken"]
 
     aws4_request = "/".join([datez, region_name, "s3", "aws4_request"])
     cred_string = f"{cred}/{aws4_request}"
 
-    can_query_string = "&".join([
-        f"A-userid={user_id}",
-        "X-Amz-Algorithm=AWS4-HMAC-SHA256",
-        "X-Amz-Credential=" + urllib.parse.quote_plus(cred_string),
-        "X-Amz-Date=" + timez,
-        f"X-Amz-Expires={expire_seconds}",
-        "X-Amz-Security-Token=" + urllib.parse.quote_plus(token),
-        "X-Amz-SignedHeaders=host"
-    ])
+    can_query_string = "&".join(
+        [
+            f"A-userid={user_id}",
+            "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+            "X-Amz-Credential=" + urllib.parse.quote_plus(cred_string),
+            "X-Amz-Date=" + timez,
+            f"X-Amz-Expires={expire_seconds}",
+            "X-Amz-Security-Token=" + urllib.parse.quote_plus(token),
+            "X-Amz-SignedHeaders=host",
+        ]
+    )
 
     if api_request_uuid is not None:
-        can_query_string = "&".join([
-            f"A-api-request-uuid={api_request_uuid}",
-            can_query_string,
-        ])
+        can_query_string = "&".join(
+            [
+                f"A-api-request-uuid={api_request_uuid}",
+                can_query_string,
+            ]
+        )
 
     can_request = (
         f"{method}\n"
@@ -72,12 +76,9 @@ def get_presigned_url(
     )
     can_request_hash = sha256(can_request.encode()).hexdigest()
 
-    string_to_sign = "\n".join([
-        "AWS4-HMAC-SHA256",
-        timez,
-        aws4_request,
-        can_request_hash
-    ])
+    string_to_sign = "\n".join(
+        ["AWS4-HMAC-SHA256", timez, aws4_request, can_request_hash]
+    )
 
     step_one = hmacsha256(f"AWS4{secret}".encode(), datez).digest()
     step_two = hmacsha256(step_one, region_name).digest()
