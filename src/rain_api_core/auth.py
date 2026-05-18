@@ -57,7 +57,7 @@ class JwtManager:
         private_key: str,
         cookie_name: str,
         blacklist={},
-        session_ttl_in_hours: float = 7 * 24,
+        session_ttl_in_hours: float = 24,
     ):
         self.algorithm = algorithm
         self.public_key = public_key
