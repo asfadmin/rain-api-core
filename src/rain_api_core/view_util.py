@@ -26,8 +26,7 @@ HTML_TEMPLATE_STATUS = ""
 HTML_TEMPLATE_LOCAL_CACHEDIR = "/tmp/templates/"  # nosec We want to leverage instance persistance
 HTML_TEMPLATE_PROJECT_DIR = Path().resolve() / "templates"
 
-_HOURS_PER_WEEK = 7 * 24
-SESSTTL = int(os.getenv("SESSION_TTL", _HOURS_PER_WEEK)) * 60 * 60
+SESSTTL = int(os.getenv("SESSION_TTL", 24)) * 60 * 60
 
 JWT_ALGO = os.getenv("JWT_ALGO", "RS256")
 JWT_COOKIE_NAME = os.getenv("JWT_COOKIENAME", "asf-urs")

@@ -180,22 +180,22 @@ def test_get_cookie_vars_error(mock_decode_jwt_payload, mock_get_cookies):
 def test_get_exp_time(mock_time):
     mock_time.return_value = 100
 
-    assert get_exp_time() == 100 + (168 * 60 * 60)
+    assert get_exp_time() == 100 + (24 * 60 * 60)
 
 
 @mock.patch(f"{MODULE}.time", autospec=True)
 def test_get_cookie_expiration_date_str(mock_time):
     mock_time.return_value = 0
-    assert get_cookie_expiration_date_str() == "Thu, 08 Jan 1970 00:00:00 GMT"
+    assert get_cookie_expiration_date_str() == "Fri, 02 Jan 1970 00:00:00 GMT"
 
     mock_time.return_value = 1
-    assert get_cookie_expiration_date_str() == "Thu, 08 Jan 1970 00:00:01 GMT"
+    assert get_cookie_expiration_date_str() == "Fri, 02 Jan 1970 00:00:01 GMT"
 
     mock_time.return_value = 1_000_000
-    assert get_cookie_expiration_date_str() == "Mon, 19 Jan 1970 13:46:40 GMT"
+    assert get_cookie_expiration_date_str() == "Tue, 13 Jan 1970 13:46:40 GMT"
 
     mock_time.return_value = 1_000_000_000
-    assert get_cookie_expiration_date_str() == "Sun, 16 Sep 2001 01:46:40 GMT"
+    assert get_cookie_expiration_date_str() == "Mon, 10 Sep 2001 01:46:40 GMT"
 
 
 @given(
