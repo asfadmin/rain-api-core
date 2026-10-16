@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "rain-api-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "RAIN API Core"
 readme = "README.md"
 authors = [
@@ -12,6 +12,7 @@ authors = [
 ]
 requires-python = "~=3.10"
 dependencies = [
+    "boto3~=1.35",
     "cachetools~=5.0",
     "jinja2~=3.0",
     "netaddr~=1.0",
@@ -21,7 +22,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "boto3~=1.35",
     "hypothesis~=6.112",
     "moto~=5.0",
     "pytest~=8.3",
