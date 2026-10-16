@@ -1,5 +1,7 @@
 import contextlib
 import dataclasses
+import hashlib
+import json
 import logging
 from collections.abc import Mapping
 from http.cookies import CookieError, SimpleCookie
@@ -8,6 +10,7 @@ from typing import Optional
 from wsgiref.handlers import format_date_time as format_7231_date
 
 import jwt
+from boto3 import client as botoclient
 
 log = logging.getLogger(__name__)
 
@@ -159,3 +162,96 @@ class JwtManager:
                 "HttpOnly; SameSite=Lax"
             )
         }
+
+
+class SessionManager:
+    def __init__(
+        self,
+        table_name: str,
+        column_names: Mapping[str, str] = {
+            "session_id": "SessionId",
+            "iat": "CreatedAt",
+            "ttl": "ExpiresAt",
+        },
+    ):
+        self.client = botoclient("dynamodb")
+        self.table_name = table_name
+        self._session_id_column = column_names["session_id"]
+        self._iat_column = column_names["iat"]
+        self._ttl_column = column_names["ttl"]
+
+    def revoke_session(self, user_profile: UserProfile):
+        session_id = self._get_session_id(user_profile)
+        exp = user_profile.exp
+
+        assert exp is not None
+
+        log.info(
+            "Revoking session for user %s with session_id: %s",
+            user_profile.user_id,
+            session_id,
+        )
+        self.client.put_item(
+            TableName=self.table_name,
+            Item={
+                self._session_id_column: {
+                    "S": session_id,
+                },
+                self._iat_column: {
+                    "N": str(int(time())),
+                },
+                self._ttl_column: {
+                    "N": str(exp),
+                },
+            },
+        )
+
+    def is_session_revoked(self, user_profile: UserProfile) -> bool:
+        session_id = self._get_session_id(user_profile)
+
+        iat = user_profile.iat
+
+        assert iat is not None
+
+        log.debug(
+            "Checking for revoked session for user %s with session_id: %s",
+            user_profile.user_id,
+            session_id,
+        )
+        response = self.client.query(
+            TableName=self.table_name,
+            KeyConditionExpression=f"{self._session_id_column} = :sessionId",
+            FilterExpression=f"{self._ttl_column} > :now and {self._iat_column} >= :iat",
+            ExpressionAttributeValues={
+                ":sessionId": {
+                    "S": session_id,
+                },
+                ":iat": {
+                    "N": str(iat),
+                },
+                ":now": {
+                    "N": str(int(time())),
+                },
+            },
+        )
+
+        is_revoked = session_id in (
+            # ruff hint
+            item["SessionId"]["S"]
+            for item in response.get("Items", ())
+        )
+        if is_revoked:
+            log.info("Session for user %s has been revoked", user_profile.user_id)
+
+        return is_revoked
+
+    def _get_session_id(self, user_profile: UserProfile) -> str:
+        # Depending on how we compute the session ID here we can determine the
+        # scope of the log out. If we use the entire JWT cookie payload, then
+        # logging out means only invalidating that cookie. If the same user has
+        # other cookies active as well then those will remain active. If instead
+        # we just use the user ID, then all cookies associated with that user
+        # will be invalidated.
+        return hashlib.sha256(
+            json.dumps(user_profile.to_jwt_payload()).encode(),
+        ).hexdigest()
