@@ -59,7 +59,7 @@ class JwtManager:
         public_key: str,
         private_key: str,
         cookie_name: str,
-        blacklist={},
+        blacklist: Mapping[str, int] = {},
         session_ttl_in_hours: float = 24,
     ):
         self.algorithm = algorithm
