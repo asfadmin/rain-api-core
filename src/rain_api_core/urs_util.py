@@ -234,11 +234,11 @@ def user_in_group_urs(
 
 
 def user_in_group(
-    private_groups,
-    user_profile: UserProfile,
-    refresh_first=False,
-    aux_headers=None,
-):
+    private_groups: list,
+    user_profile: Optional[UserProfile],
+    refresh_first: bool = False,
+    aux_headers: Optional[dict] = None,
+) -> tuple[bool, Optional[UserProfile]]:
     aux_headers = aux_headers or {}  # A safer default
 
     # If a new profile is fetched, it is assigned to this var, and returned so that a fresh jwt cookie can be set.
