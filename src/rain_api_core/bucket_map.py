@@ -1,11 +1,13 @@
 from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
 
 # By default, buckets are accessible to any logged in users. This is
 # represented by an empty set.
 _DEFAULT_PERMISSION_FACTORY = set
+Access = Union[set[str], None]
+AccessRules = dict[str, Access]
 
 
 def _is_accessible(
@@ -29,7 +31,7 @@ class BucketMapEntry:
     bucket_path: str
     object_key: str
     headers: dict = field(default_factory=dict)
-    _access_control: Optional[dict] = None
+    _access_rules: Optional[AccessRules] = None
 
     def is_accessible(self, groups: Optional[Iterable[str]] = None) -> bool:
         """Check if the object is accessible with the given permissions.
@@ -49,12 +51,12 @@ class BucketMapEntry:
         access the object. Returns None if the object has public access. An
         empty set means any logged in user can access the object.
         """
-        if not self._access_control:
+        if not self._access_rules:
             return _DEFAULT_PERMISSION_FACTORY()
 
         # NOTE: Key order is important here. Most deeply nested keys need to be
         # checked first.
-        for key_prefix, access in self._access_control.items():
+        for key_prefix, access in self._access_rules.items():
             if self.object_key.startswith(key_prefix):
                 return access
 
@@ -161,7 +163,7 @@ class BucketMap:
             # TODO(reweeden): Do we really want to control access by
             # bucket? Wouldn't it make more sense to control access by
             # path instead?
-            _access_control=self.access_control.get(bucket),
+            _access_rules=self.access_control.get(bucket),
         )
 
 
@@ -184,7 +186,7 @@ def _walk_entries(node: dict, path=()) -> Generator[tuple[str, tuple, Optional[d
             yield from _walk_entries(val, path_parts)
 
 
-def _parse_access_control(bucket_map: dict) -> dict:
+def _parse_access_control(bucket_map: dict) -> dict[str, AccessRules]:
     """Turn the access definitions into a dictionary of rules that should be
     checked in order.
 
@@ -235,7 +237,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     return dict(access)
 
 
-def _check_iam_compatible(access_control: dict):
+def _check_iam_compatible(access_control: dict[str, AccessRules]):
     """Check that the access control configuration is compatible with IAM.
 
     This means nested prefixes must always be accessible to a superset of their
@@ -286,7 +288,7 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
     return longest_prefix
 
 
-def _access_text(access) -> str:
+def _access_text(access: Access) -> str:
     if access is None:
         return "public access"
     if access == set():
@@ -299,14 +301,14 @@ class IamPolicyGenerator:
     def __init__(self, groups: Optional[Iterable[str]]):
         self.groups = groups
 
-    def _is_accessible(self, required_groups: Optional[set]) -> bool:
+    def _is_accessible(self, required_groups: Optional[set[str]]) -> bool:
         return _is_accessible(required_groups, self.groups)
 
     def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
         # Dedupe across buckets
         bucket_access = {
             # ruff hint
-            entry.bucket: entry._access_control
+            entry.bucket: entry._access_rules
             for entry in entries
         }
 
@@ -354,7 +356,10 @@ class IamPolicyGenerator:
             ],
         }
 
-    def _consolidate_access_rules(self, access_control: Optional[dict]) -> dict:
+    def _consolidate_access_rules(
+        self,
+        access_control: Optional[dict[str, Access]],
+    ) -> dict[str, Access]:
         """Removes redundant rules by finding the shortest prefixes that
         are accessible.
 

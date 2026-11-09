@@ -322,13 +322,13 @@ def test_entries(sample_bucket_map):
             bucket="browse-bucket",
             bucket_path="general-browse",
             object_key="",
-            _access_control={"": None},
+            _access_rules={"": None},
         ),
         BucketMapEntry(
             bucket="bucket",
             bucket_path="productX",
             object_key="",
-            _access_control={
+            _access_rules={
                 "2020/12": {"science_team"},
                 "browse": None,
                 "": set(),
@@ -343,7 +343,7 @@ def test_entries(sample_bucket_map):
             bucket="nested-bucket-private",
             bucket_path="nested/nested2b",
             object_key="",
-            _access_control={"": set()},
+            _access_rules={"": set()},
         ),
     ]
 
