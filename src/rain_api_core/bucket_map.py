@@ -141,8 +141,8 @@ class BucketMap:
     def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
-        generator = IamPolicyGenerator(groups)
-        return generator.generate_policy(self.entries())
+
+        return generate_iam_policy(self.entries(), groups)
 
     def _get_map(self) -> dict:
         # Old and REVERSE format has no 'MAP'.
@@ -297,99 +297,96 @@ def _access_text(access: Access) -> str:
     return str(access)
 
 
-class IamPolicyGenerator:
-    def __init__(self, groups: Optional[Iterable[str]]):
-        self.groups = groups
+def generate_iam_policy(
+    entries: Iterable[BucketMapEntry],
+    groups: Optional[Iterable[str]],
+) -> Optional[dict]:
+    # Dedupe across buckets
+    bucket_access = {
+        # ruff hint
+        entry.bucket: entry._access_rules
+        for entry in entries
+    }
 
-    def _is_accessible(self, required_groups: Optional[set[str]]) -> bool:
-        return _is_accessible(required_groups, self.groups)
+    get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
+    list_bucket_prefixes = defaultdict(list)
+    for bucket, access_control in bucket_access.items():
+        consolidated = _consolidate_access_rules(access_control, groups)
 
-    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
-        # Dedupe across buckets
-        bucket_access = {
-            # ruff hint
-            entry.bucket: entry._access_rules
-            for entry in entries
-        }
+        for key_prefix, _ in reversed(consolidated.items()):
+            if key_prefix:
+                list_bucket_prefixes[key_prefix].append(bucket)
+            else:
+                get_object_statement.add_action("s3:ListBucket")
+                get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
 
-        get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
-        list_bucket_prefixes = defaultdict(list)
-        for bucket, access_control in bucket_access.items():
-            consolidated = self._consolidate_access_rules(access_control)
+            get_object_statement.add_resource(
+                f"arn:aws:s3:::{bucket}/{key_prefix}*",
+            )
 
-            for key_prefix, _ in reversed(consolidated.items()):
-                if key_prefix:
-                    list_bucket_prefixes[key_prefix].append(bucket)
-                else:
-                    get_object_statement.add_action("s3:ListBucket")
-                    get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
+    if not get_object_statement.resource:
+        return None
 
-                get_object_statement.add_resource(
-                    f"arn:aws:s3:::{bucket}/{key_prefix}*",
-                )
+    # Merge prefixes when all resources match
+    list_bucket_conditions = defaultdict(list)
+    for prefix, buckets in list_bucket_prefixes.items():
+        list_bucket_conditions[tuple(sorted(buckets))].append(prefix)
 
-        if not get_object_statement.resource:
-            return None
-
-        # Merge prefixes when all resources match
-        list_bucket_conditions = defaultdict(list)
-        for prefix, buckets in list_bucket_prefixes.items():
-            list_bucket_conditions[tuple(sorted(buckets))].append(prefix)
-
-        return {
-            "Version": "2012-10-17",
-            "Statement": [
-                get_object_statement.to_dict(),
-                *(
-                    _IamStatement(
-                        effect="Allow",
-                        action=["s3:ListBucket"],
-                        resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
-                        condition={
-                            "StringLike": {
-                                "s3:prefix": [f"{prefix}*" for prefix in prefixes],
-                            },
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            get_object_statement.to_dict(),
+            *(
+                _IamStatement(
+                    effect="Allow",
+                    action=["s3:ListBucket"],
+                    resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
+                    condition={
+                        "StringLike": {
+                            "s3:prefix": [f"{prefix}*" for prefix in prefixes],
                         },
-                    ).to_dict()
-                    for buckets, prefixes in list_bucket_conditions.items()
-                ),
-            ],
-        }
+                    },
+                ).to_dict()
+                for buckets, prefixes in list_bucket_conditions.items()
+            ),
+        ],
+    }
 
-    def _consolidate_access_rules(
-        self,
-        access_control: Optional[dict[str, Access]],
-    ) -> dict[str, Access]:
-        """Removes redundant rules by finding the shortest prefixes that
-        are accessible.
 
-        For example if our access rules look like this:
-        {
-            "key1/foo/bar": None,
-            "key1/bar/baz": set(),
-            "key1/": {"group", "group2"},
-            "key2/": {"group", "group2", "group3"},
-            "key3/": {"group2", "group3"},
-            "": {"group2"}
-        }
+def _consolidate_access_rules(
+    access_control: Optional[dict[str, Access]],
+    groups: Optional[Iterable[str]],
+) -> dict[str, Access]:
+    """Removes redundant rules by finding the shortest prefixes that
+    are accessible.
 
-        Our consolidated access rules for a user in 'group' look like this:
-        {
-            "key1/": {"group", "group2"},
-            "key2/": {"group", "group2", "group3"},
-        }
-        """
-        if access_control is None:
-            return {"": None}
+    For example if our access rules look like this:
+    {
+        "key1/foo/bar": None,
+        "key1/bar/baz": set(),
+        "key1/": {"group", "group2"},
+        "key2/": {"group", "group2", "group3"},
+        "key3/": {"group2", "group3"},
+        "": {"group2"}
+    }
 
-        consolidated = {}
-        for key_prefix, access in reversed(access_control.items()):
-            if self._is_accessible(access):
-                longest_prefix = _get_longest_prefix(key_prefix, consolidated)
-                if longest_prefix is None:
-                    consolidated[key_prefix] = access
+    Our consolidated access rules for a user in 'group' look like this:
+    {
+        "key1/": {"group", "group2"},
+        "key2/": {"group", "group2", "group3"},
+    }
+    """
+    if access_control is None:
+        return {"": None}
 
-        return consolidated
+    consolidated = {}
+    for key_prefix, access in reversed(access_control.items()):
+        if _is_accessible(access, groups):
+            longest_prefix = _get_longest_prefix(key_prefix, consolidated)
+            if longest_prefix is None:
+                consolidated[key_prefix] = access
+
+    return consolidated
 
 
 class _IamStatement:
