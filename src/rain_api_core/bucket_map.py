@@ -1,3 +1,4 @@
+import urllib.parse
 from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -138,11 +139,15 @@ class BucketMap:
                 headers=headers,
             )
 
-    def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
+    def to_iam_policy(
+        self,
+        groups: Optional[Iterable[str]] = None,
+        scopes: Optional[Iterable[str]] = None,
+    ) -> Optional[dict]:
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
 
-        return generate_iam_policy(self.entries(), groups)
+        return generate_iam_policy(self.entries(), groups, scopes)
 
     def _get_map(self) -> dict:
         # Old and REVERSE format has no 'MAP'.
@@ -297,9 +302,49 @@ def _access_text(access: Access) -> str:
     return str(access)
 
 
+@dataclass(frozen=True)
+class Scope:
+    bucket: str
+    prefix: str
+
+    @classmethod
+    def from_uri(cls, uri: str) -> "Scope":
+        parsed = urllib.parse.urlparse(uri)
+        if parsed.scheme != "s3":
+            raise ValueError("scope URI must begin with 's3://'")
+
+        return cls(
+            bucket=parsed.netloc,
+            prefix=parsed.path.removeprefix("/"),
+        )
+
+    def is_in_scope(self, bucket: str, key: str) -> bool:
+        return (bucket, key) in self
+
+    def __contains__(self, item: tuple[str, str]) -> bool:
+        bucket, key = item
+
+        return bucket == self.bucket and key.startswith(self.prefix)
+
+
+def _is_in_scope(bucket: str, key: str, scopes: Optional[Iterable[Scope]]) -> bool:
+    if scopes is None:
+        return True
+
+    return any(scope.is_in_scope(bucket, key) for scope in scopes)
+
+
+def _parse_scope(scopes: Optional[Iterable[str]]) -> Optional[list[Scope]]:
+    if scopes is None:
+        return None
+
+    return [Scope.from_uri(scope) for scope in scopes]
+
+
 def generate_iam_policy(
     entries: Iterable[BucketMapEntry],
     groups: Optional[Iterable[str]],
+    scopes: Optional[Iterable[str]] = None,
 ) -> Optional[dict]:
     # Dedupe across buckets
     bucket_access = {
@@ -307,6 +352,7 @@ def generate_iam_policy(
         entry.bucket: entry._access_rules
         for entry in entries
     }
+    scope_list = _parse_scope(scopes)
 
     get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
     list_bucket_prefixes = defaultdict(list)
@@ -314,6 +360,9 @@ def generate_iam_policy(
         consolidated = _consolidate_access_rules(access_control, groups)
 
         for key_prefix, _ in reversed(consolidated.items()):
+            if not _is_in_scope(bucket, key_prefix, scope_list):
+                continue
+
             if key_prefix:
                 list_bucket_prefixes[key_prefix].append(bucket)
             else:
