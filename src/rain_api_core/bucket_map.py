@@ -1,11 +1,14 @@
+import urllib.parse
 from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
 
 # By default, buckets are accessible to any logged in users. This is
 # represented by an empty set.
 _DEFAULT_PERMISSION_FACTORY = set
+Access = Union[set[str], None]
+AccessRules = dict[str, Access]
 
 
 def _is_accessible(
@@ -29,7 +32,7 @@ class BucketMapEntry:
     bucket_path: str
     object_key: str
     headers: dict = field(default_factory=dict)
-    _access_control: Optional[dict] = None
+    _access_rules: Optional[AccessRules] = None
 
     def is_accessible(self, groups: Optional[Iterable[str]] = None) -> bool:
         """Check if the object is accessible with the given permissions.
@@ -49,12 +52,12 @@ class BucketMapEntry:
         access the object. Returns None if the object has public access. An
         empty set means any logged in user can access the object.
         """
-        if not self._access_control:
+        if not self._access_rules:
             return _DEFAULT_PERMISSION_FACTORY()
 
         # NOTE: Key order is important here. Most deeply nested keys need to be
         # checked first.
-        for key_prefix, access in self._access_control.items():
+        for key_prefix, access in self._access_rules.items():
             if self.object_key.startswith(key_prefix):
                 return access
 
@@ -136,11 +139,25 @@ class BucketMap:
                 headers=headers,
             )
 
-    def to_iam_policy(self, groups: Optional[Iterable[str]] = None) -> Optional[dict]:
+    def to_iam_policy(
+        self,
+        groups: Optional[Iterable[str]] = None,
+        scopes: Optional[Iterable[str]] = None,
+    ) -> Optional[dict]:
+        """Create an IAM policy that allows direct S3 access to the buckets
+        defined in the BucketMap.
+
+        Setting `scopes` allows further restriction of the access granted by the
+        policy. Each scope must use the format `s3://bucket/prefix`.
+        """
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
-        generator = IamPolicyGenerator(groups)
-        return generator.generate_policy(self.entries())
+
+        return generate_iam_policy(
+            entries=self.entries(),
+            groups=groups,
+            scope=Scope(scopes) if scopes is not None else None,
+        )
 
     def _get_map(self) -> dict:
         # Old and REVERSE format has no 'MAP'.
@@ -161,7 +178,7 @@ class BucketMap:
             # TODO(reweeden): Do we really want to control access by
             # bucket? Wouldn't it make more sense to control access by
             # path instead?
-            _access_control=self.access_control.get(bucket),
+            _access_rules=self.access_control.get(bucket),
         )
 
 
@@ -184,7 +201,7 @@ def _walk_entries(node: dict, path=()) -> Generator[tuple[str, tuple, Optional[d
             yield from _walk_entries(val, path_parts)
 
 
-def _parse_access_control(bucket_map: dict) -> dict:
+def _parse_access_control(bucket_map: dict) -> dict[str, AccessRules]:
     """Turn the access definitions into a dictionary of rules that should be
     checked in order.
 
@@ -235,7 +252,7 @@ def _parse_access_control(bucket_map: dict) -> dict:
     return dict(access)
 
 
-def _check_iam_compatible(access_control: dict):
+def _check_iam_compatible(access_control: dict[str, AccessRules]):
     """Check that the access control configuration is compatible with IAM.
 
     This means nested prefixes must always be accessible to a superset of their
@@ -286,7 +303,7 @@ def _get_longest_prefix(key: str, prefixes: Iterable[str]) -> Optional[str]:
     return longest_prefix
 
 
-def _access_text(access) -> str:
+def _access_text(access: Access) -> str:
     if access is None:
         return "public access"
     if access == set():
@@ -295,96 +312,156 @@ def _access_text(access) -> str:
     return str(access)
 
 
-class IamPolicyGenerator:
-    def __init__(self, groups: Optional[Iterable[str]]):
-        self.groups = groups
+class Scope:
+    def __init__(self, uris: Iterable[str]):
+        by_bucket: defaultdict[str, list[str]] = defaultdict(list)
+        for uri in uris:
+            bucket, prefix = _parse_uri(uri)
+            by_bucket[bucket].append(prefix)
 
-    def _is_accessible(self, required_groups: Optional[set]) -> bool:
-        return _is_accessible(required_groups, self.groups)
-
-    def generate_policy(self, entries: Iterable[BucketMapEntry]) -> Optional[dict]:
-        # Dedupe across buckets
-        bucket_access = {
-            # ruff hint
-            entry.bucket: entry._access_control
-            for entry in entries
+        self.locations = {
+            bucket: _consolidate_prefixes(prefixes)
+            for bucket, prefixes in by_bucket.items()
         }
 
-        get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
-        list_bucket_prefixes = defaultdict(list)
-        for bucket, access_control in bucket_access.items():
-            consolidated = self._consolidate_access_rules(access_control)
+    def intersect(self, bucket: str, prefix: str) -> Optional[str]:
+        """Intersect the prefix within this scope, returning the most narrow
+        prefix, or None if out of scope.
 
-            for key_prefix, _ in reversed(consolidated.items()):
-                if key_prefix:
-                    list_bucket_prefixes[key_prefix].append(bucket)
-                else:
-                    get_object_statement.add_action("s3:ListBucket")
-                    get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
+        For example, if the scope is
+            `s3://bucket/my-prefix/`
+        calling
+            `intersect("bucket", "")`
+        will return a new prefix of `my-prefix/` to match the scope.
 
-                get_object_statement.add_resource(
-                    f"arn:aws:s3:::{bucket}/{key_prefix}*",
-                )
-
-        if not get_object_statement.resource:
-            return None
-
-        # Merge prefixes when all resources match
-        list_bucket_conditions = defaultdict(list)
-        for prefix, buckets in list_bucket_prefixes.items():
-            list_bucket_conditions[tuple(sorted(buckets))].append(prefix)
-
-        return {
-            "Version": "2012-10-17",
-            "Statement": [
-                get_object_statement.to_dict(),
-                *(
-                    _IamStatement(
-                        effect="Allow",
-                        action=["s3:ListBucket"],
-                        resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
-                        condition={
-                            "StringLike": {
-                                "s3:prefix": [f"{prefix}*" for prefix in prefixes],
-                            },
-                        },
-                    ).to_dict()
-                    for buckets, prefixes in list_bucket_conditions.items()
-                ),
-            ],
-        }
-
-    def _consolidate_access_rules(self, access_control: Optional[dict]) -> dict:
-        """Removes redundant rules by finding the shortest prefixes that
-        are accessible.
-
-        For example if our access rules look like this:
-        {
-            "key1/foo/bar": None,
-            "key1/bar/baz": set(),
-            "key1/": {"group", "group2"},
-            "key2/": {"group", "group2", "group3"},
-            "key3/": {"group2", "group3"},
-            "": {"group2"}
-        }
-
-        Our consolidated access rules for a user in 'group' look like this:
-        {
-            "key1/": {"group", "group2"},
-            "key2/": {"group", "group2", "group3"},
-        }
+        However, calling
+            `intersect("bucket", "my-prefix/sub-prefix/")`
+        will return the input prefix of `my-prefix/sub-prefix/` since it is
+        more restrictive than the scope itself.
         """
-        if access_control is None:
-            return {"": None}
+        for scope_prefix in self.locations.get(bucket, ()):
+            if scope_prefix.startswith(prefix):
+                return scope_prefix
+            if prefix.startswith(scope_prefix):
+                return prefix
 
-        consolidated = {}
-        for key_prefix, access in reversed(access_control.items()):
-            if self._is_accessible(access):
-                longest_prefix = _get_longest_prefix(key_prefix, consolidated)
-                if longest_prefix is None:
-                    consolidated[key_prefix] = access
+        return None
 
-        return consolidated
+
+def _parse_uri(uri: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(uri)
+    if parsed.scheme != "s3":
+        raise ValueError("scope URI must begin with 's3://'")
+
+    return parsed.netloc, parsed.path.removeprefix("/")
+
+
+def generate_iam_policy(
+    entries: Iterable[BucketMapEntry],
+    groups: Optional[Iterable[str]],
+    scope: Optional[Scope] = None,
+) -> Optional[dict]:
+    # Dedupe across buckets
+    bucket_access = {
+        # ruff hint
+        entry.bucket: entry._access_rules
+        for entry in entries
+    }
+
+    get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
+    list_bucket_prefixes = defaultdict(list)
+    for bucket, access_control in bucket_access.items():
+        consolidated = _consolidate_access_rules(access_control, groups)
+
+        for key_prefix, _ in reversed(consolidated.items()):
+            if scope is not None:
+                key_prefix = scope.intersect(bucket, key_prefix)
+                if key_prefix is None:
+                    continue
+
+            if key_prefix:
+                list_bucket_prefixes[key_prefix].append(bucket)
+            else:
+                get_object_statement.add_action("s3:ListBucket")
+                get_object_statement.add_resource(f"arn:aws:s3:::{bucket}")
+
+            get_object_statement.add_resource(
+                f"arn:aws:s3:::{bucket}/{key_prefix}*",
+            )
+
+    if not get_object_statement.resource:
+        return None
+
+    # Merge prefixes when all resources match
+    list_bucket_conditions = defaultdict(list)
+    for prefix, buckets in list_bucket_prefixes.items():
+        list_bucket_conditions[tuple(sorted(buckets))].append(prefix)
+
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            get_object_statement.to_dict(),
+            *(
+                _IamStatement(
+                    effect="Allow",
+                    action=["s3:ListBucket"],
+                    resource=[f"arn:aws:s3:::{bucket}" for bucket in buckets],
+                    condition={
+                        "StringLike": {
+                            "s3:prefix": [f"{prefix}*" for prefix in prefixes],
+                        },
+                    },
+                ).to_dict()
+                for buckets, prefixes in list_bucket_conditions.items()
+            ),
+        ],
+    }
+
+
+def _consolidate_prefixes(prefixes: Iterable[str]) -> list[str]:
+    consolidated = []
+    for prefix in sorted(prefixes, key=len):
+        longest_prefix = _get_longest_prefix(prefix, consolidated)
+        if longest_prefix is None:
+            consolidated.append(prefix)
+
+    return consolidated
+
+
+def _consolidate_access_rules(
+    access_control: Optional[dict[str, Access]],
+    groups: Optional[Iterable[str]],
+) -> dict[str, Access]:
+    """Removes redundant rules by finding the shortest prefixes that
+    are accessible.
+
+    For example if our access rules look like this:
+    {
+        "key1/foo/bar": None,
+        "key1/bar/baz": set(),
+        "key1/": {"group", "group2"},
+        "key2/": {"group", "group2", "group3"},
+        "key3/": {"group2", "group3"},
+        "": {"group2"}
+    }
+
+    Our consolidated access rules for a user in 'group' look like this:
+    {
+        "key1/": {"group", "group2"},
+        "key2/": {"group", "group2", "group3"},
+    }
+    """
+    if access_control is None:
+        return {"": None}
+
+    consolidated = {}
+    for key_prefix, access in reversed(access_control.items()):
+        if _is_accessible(access, groups):
+            longest_prefix = _get_longest_prefix(key_prefix, consolidated)
+            if longest_prefix is None:
+                consolidated[key_prefix] = access
+
+    return consolidated
 
 
 class _IamStatement:

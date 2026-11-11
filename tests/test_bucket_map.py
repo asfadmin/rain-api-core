@@ -322,13 +322,13 @@ def test_entries(sample_bucket_map):
             bucket="browse-bucket",
             bucket_path="general-browse",
             object_key="",
-            _access_control={"": None},
+            _access_rules={"": None},
         ),
         BucketMapEntry(
             bucket="bucket",
             bucket_path="productX",
             object_key="",
-            _access_control={
+            _access_rules={
                 "2020/12": {"science_team"},
                 "browse": None,
                 "": set(),
@@ -343,7 +343,7 @@ def test_entries(sample_bucket_map):
             bucket="nested-bucket-private",
             bucket_path="nested/nested2b",
             object_key="",
-            _access_control={"": set()},
+            _access_rules={"": set()},
         ),
     ]
 
@@ -956,6 +956,210 @@ def test_to_iam_policy_merge_prefix_resources():
                     "StringLike": {
                         "s3:prefix": [
                             "theprefix/*",
+                        ]
+                    }
+                },
+            },
+        ],
+    }
+
+
+def test_to_iam_policy_scope_single():
+    bucket_map = {
+        "PATH_1": "bucket1",
+        "PATH_2": "bucket2",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=(), scopes=["s3://bucket1"]) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                    "arn:aws:s3:::bucket1/*",
+                ],
+            }
+        ],
+    }
+
+    assert b_map.to_iam_policy(groups=(), scopes=["s3://bucket2"]) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket2",
+                    "arn:aws:s3:::bucket2/*",
+                ],
+            }
+        ],
+    }
+
+
+def test_to_iam_policy_scope_multiple():
+    bucket_map = {
+        "PATH_1": "bucket1",
+        "PATH_2": "bucket2",
+        "PATH_3": "bucket3",
+        "PATH_4": "bucket4",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(
+        groups=(),
+        scopes=[
+            "s3://bucket1",
+            "s3://bucket3",
+        ],
+    ) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                    "arn:aws:s3:::bucket1/*",
+                    "arn:aws:s3:::bucket3",
+                    "arn:aws:s3:::bucket3/*",
+                ],
+            }
+        ],
+    }
+
+
+def test_to_iam_policy_scope_multiple_paths():
+    bucket_map = {
+        "PATH1": "bucket1",
+        "PATH2": "bucket2",
+        "PATH3": "bucket3",
+        "PRIVATE_BUCKETS": {
+            "bucket1": ["science_team"],
+            "bucket2": ["science_team"],
+            "bucket3": ["science_team"],
+            "bucket1/theprefix/": [],
+            "bucket2/theprefix/": [],
+            "bucket3/one_prefix/": [],
+            "bucket3/another_prefix/": [],
+            "bucket3/a_third_prefix/": [],
+            "bucket3/a_fourth_prefix/": [],
+        },
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(
+        groups=(),
+        scopes=[
+            "s3://bucket1",
+            "s3://bucket3/a_fourth_prefix/",
+        ],
+    ) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/theprefix/*",
+                    "arn:aws:s3:::bucket3/a_fourth_prefix/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "theprefix/*",
+                        ]
+                    }
+                },
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket3",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "a_fourth_prefix/*",
+                        ]
+                    }
+                },
+            },
+        ],
+    }
+
+
+def test_to_iam_policy_scope_added_prefix():
+    bucket_map = {
+        "PATH_1": "bucket1",
+        "PATH_2": "bucket2",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=(), scopes=["s3://bucket1/foobar/"]) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/foobar/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "foobar/*",
+                        ]
+                    }
+                },
+            },
+        ],
+    }
+
+    assert b_map.to_iam_policy(
+        groups=(),
+        scopes=[
+            "s3://bucket1/foobar/baz/",
+            "s3://bucket1/foobar/",
+        ],
+    ) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/foobar/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "foobar/*",
                         ]
                     }
                 },
