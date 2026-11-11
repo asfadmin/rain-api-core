@@ -1100,6 +1100,74 @@ def test_to_iam_policy_scope_multiple_paths():
     }
 
 
+def test_to_iam_policy_scope_added_prefix():
+    bucket_map = {
+        "PATH_1": "bucket1",
+        "PATH_2": "bucket2",
+    }
+    b_map = BucketMap(bucket_map)
+
+    assert b_map.to_iam_policy(groups=(), scopes=["s3://bucket1/foobar/"]) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/foobar/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "foobar/*",
+                        ]
+                    }
+                },
+            },
+        ],
+    }
+
+    assert b_map.to_iam_policy(
+        groups=(),
+        scopes=[
+            "s3://bucket1/foobar/baz/",
+            "s3://bucket1/foobar/",
+        ],
+    ) == {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1/foobar/*",
+                ],
+            },
+            {
+                "Effect": "Allow",
+                "Action": ["s3:ListBucket"],
+                "Resource": [
+                    "arn:aws:s3:::bucket1",
+                ],
+                "Condition": {
+                    "StringLike": {
+                        "s3:prefix": [
+                            "foobar/*",
+                        ]
+                    }
+                },
+            },
+        ],
+    }
+
+
 def test_to_iam_policy(sample_bucket_map_iam):
     b_map = BucketMap(sample_bucket_map_iam, bucket_name_prefix="pre-")
 

@@ -144,10 +144,20 @@ class BucketMap:
         groups: Optional[Iterable[str]] = None,
         scopes: Optional[Iterable[str]] = None,
     ) -> Optional[dict]:
+        """Create an IAM policy that allows direct S3 access to the buckets
+        defined in the BucketMap.
+
+        Setting `scopes` allows further restriction of the access granted by the
+        policy. Each scope must use the format `s3://bucket/prefix`.
+        """
         if not self._iam_compatible:
             _check_iam_compatible(self.access_control)
 
-        return generate_iam_policy(self.entries(), groups, scopes)
+        return generate_iam_policy(
+            entries=self.entries(),
+            groups=groups,
+            scope=Scope(scopes) if scopes is not None else None,
+        )
 
     def _get_map(self) -> dict:
         # Old and REVERSE format has no 'MAP'.
@@ -302,49 +312,54 @@ def _access_text(access: Access) -> str:
     return str(access)
 
 
-@dataclass(frozen=True)
 class Scope:
-    bucket: str
-    prefix: str
+    def __init__(self, uris: Iterable[str]):
+        by_bucket: defaultdict[str, list[str]] = defaultdict(list)
+        for uri in uris:
+            bucket, prefix = _parse_uri(uri)
+            by_bucket[bucket].append(prefix)
 
-    @classmethod
-    def from_uri(cls, uri: str) -> "Scope":
-        parsed = urllib.parse.urlparse(uri)
-        if parsed.scheme != "s3":
-            raise ValueError("scope URI must begin with 's3://'")
+        self.locations = {
+            bucket: _consolidate_prefixes(prefixes)
+            for bucket, prefixes in by_bucket.items()
+        }
 
-        return cls(
-            bucket=parsed.netloc,
-            prefix=parsed.path.removeprefix("/"),
-        )
+    def intersect(self, bucket: str, prefix: str) -> Optional[str]:
+        """Intersect the prefix within this scope, returning the most narrow
+        prefix, or None if out of scope.
 
-    def is_in_scope(self, bucket: str, key: str) -> bool:
-        return (bucket, key) in self
+        For example, if the scope is
+            `s3://bucket/my-prefix/`
+        calling
+            `intersect("bucket", "")`
+        will return a new prefix of `my-prefix/` to match the scope.
 
-    def __contains__(self, item: tuple[str, str]) -> bool:
-        bucket, key = item
+        However, calling
+            `intersect("bucket", "my-prefix/sub-prefix/")`
+        will return the input prefix of `my-prefix/sub-prefix/` since it is
+        more restrictive than the scope itself.
+        """
+        for scope_prefix in self.locations.get(bucket, ()):
+            if scope_prefix.startswith(prefix):
+                return scope_prefix
+            if prefix.startswith(scope_prefix):
+                return prefix
 
-        return bucket == self.bucket and key.startswith(self.prefix)
-
-
-def _is_in_scope(bucket: str, key: str, scopes: Optional[Iterable[Scope]]) -> bool:
-    if scopes is None:
-        return True
-
-    return any(scope.is_in_scope(bucket, key) for scope in scopes)
-
-
-def _parse_scope(scopes: Optional[Iterable[str]]) -> Optional[list[Scope]]:
-    if scopes is None:
         return None
 
-    return [Scope.from_uri(scope) for scope in scopes]
+
+def _parse_uri(uri: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(uri)
+    if parsed.scheme != "s3":
+        raise ValueError("scope URI must begin with 's3://'")
+
+    return parsed.netloc, parsed.path.removeprefix("/")
 
 
 def generate_iam_policy(
     entries: Iterable[BucketMapEntry],
     groups: Optional[Iterable[str]],
-    scopes: Optional[Iterable[str]] = None,
+    scope: Optional[Scope] = None,
 ) -> Optional[dict]:
     # Dedupe across buckets
     bucket_access = {
@@ -352,7 +367,6 @@ def generate_iam_policy(
         entry.bucket: entry._access_rules
         for entry in entries
     }
-    scope_list = _parse_scope(scopes)
 
     get_object_statement = _IamStatement(effect="Allow", action=["s3:GetObject"])
     list_bucket_prefixes = defaultdict(list)
@@ -360,8 +374,10 @@ def generate_iam_policy(
         consolidated = _consolidate_access_rules(access_control, groups)
 
         for key_prefix, _ in reversed(consolidated.items()):
-            if not _is_in_scope(bucket, key_prefix, scope_list):
-                continue
+            if scope is not None:
+                key_prefix = scope.intersect(bucket, key_prefix)
+                if key_prefix is None:
+                    continue
 
             if key_prefix:
                 list_bucket_prefixes[key_prefix].append(bucket)
@@ -400,6 +416,16 @@ def generate_iam_policy(
             ),
         ],
     }
+
+
+def _consolidate_prefixes(prefixes: Iterable[str]) -> list[str]:
+    consolidated = []
+    for prefix in sorted(prefixes, key=len):
+        longest_prefix = _get_longest_prefix(prefix, consolidated)
+        if longest_prefix is None:
+            consolidated.append(prefix)
+
+    return consolidated
 
 
 def _consolidate_access_rules(
